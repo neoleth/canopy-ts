@@ -1,4 +1,4 @@
-import protobuf from "protobufjs";
+import * as protobuf from "protobufjs";
 import { hexToBytes } from "@noble/hashes/utils.js";
 
 function shouldOmit(value: any): boolean {

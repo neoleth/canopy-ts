@@ -1,6 +1,6 @@
 {
   "name": "@canopynetwork/canopy-ts",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "TypeScript SDK for Canopy blockchain plugin frontends — signing, keystore, RPC, and WebSocket transport",
   "type": "module",
   "main": "dist/index.js",
@@ -25,11 +25,21 @@
     "./errors": {
       "types": "./dist/errors.d.ts",
       "import": "./dist/errors.js"
+    },
+    "./proto": {
+      "default": "./dist/proto/"
     }
   },
   "files": [
     "dist",
     "CHANGELOG.md"
+  ],
+  "publishedWsProtos": [
+    "ws_frame.proto",
+    "dice_ws.proto",
+    "plinko_ws.proto",
+    "market_ws.proto",
+    "account.proto"
   ],
   "repository": {
     "type": "git",
@@ -39,9 +49,10 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run postbuild",
+    "postbuild": "node scripts/copy-ws-protos.cjs",
     "dev": "tsc --watch",
-    "prepare": "tsc",
+    "prepare": "tsc && npm run postbuild",
     "test": "vitest run"
   },
   "dependencies": {
