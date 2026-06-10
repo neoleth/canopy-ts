@@ -17,3 +17,29 @@ export * from "./ws.js";
 export * from "./errors.js";
 export { WalletManager } from "./wallet-manager.js";
 export type { WalletAccount } from "./types.js";
+
+// Key generation and encryption
+export {
+  generateKeyPair,
+  encryptPrivateKey,
+  encryptPrivateKeyHex,
+  decryptPrivateKey,
+  decryptPrivateKeyHex,
+} from "./wallet.js";
+export type { GeneratedKeyPair } from "./wallet.js";
+
+// Keystore management
+export {
+  importFromGoKeystore,
+  decryptEntry,
+  encryptKeyEntry,
+} from "./keystore.js";
+export type {
+  GoKeystoreEntry,
+  ParsedKeystoreEntry,
+  NewKeyEntryArgs,
+  KeystoreStorage,
+} from "./keystore.js";
+
+// Additional types
+export type { UnlockedAccount, LoadedAccount } from "./types.js";
