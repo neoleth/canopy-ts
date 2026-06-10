@@ -1,5 +1,8 @@
 import { argon2i } from "@noble/hashes/argon2.js";
 import { hexToBytes, bytesToHex } from "@noble/hashes/utils.js";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { deriveAddress } from "./address.js";
+import { CurveType } from "./types.js";
 
 const ARGON2_PARAMS = {
   t: 3,
@@ -62,4 +65,30 @@ export async function decryptPrivateKeyHex(
 ): Promise<string> {
   const bytes = await decryptPrivateKey(encryptedHex, saltHex, password);
   return bytesToHex(bytes);
+}
+
+export interface GeneratedKeyPair {
+  privateKeyHex: string;
+  publicKeyHex: string;
+  address: string;
+  curveType: CurveType;
+}
+
+/**
+ * Generate a fresh ed25519 keypair using a CSPRNG. Browser + modern Node both
+ * provide `crypto.getRandomValues`. The address is derived via the same
+ * `deriveAddress` used everywhere else, so it round-trips with the chain.
+ */
+export function generateKeyPair(): GeneratedKeyPair {
+  const priv = new Uint8Array(32);
+  crypto.getRandomValues(priv);
+  const pub = ed25519.getPublicKey(priv);
+  const privateKeyHex = bytesToHex(priv);
+  const publicKeyHex = bytesToHex(pub);
+  return {
+    privateKeyHex,
+    publicKeyHex,
+    address: deriveAddress(publicKeyHex, CurveType.ED25519),
+    curveType: CurveType.ED25519,
+  };
 }
