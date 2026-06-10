@@ -92,3 +92,42 @@ export function generateKeyPair(): GeneratedKeyPair {
     curveType: CurveType.ED25519,
   };
 }
+
+/**
+ * Encrypt a private key symmetrically with {@link decryptPrivateKey}: argon2i
+ * KDF over a random 16-byte salt, AES-GCM with the nonce derived from the first
+ * 12 bytes of the derived key. Returns hex strings ready for a keystore entry.
+ */
+export async function encryptPrivateKey(
+  privateKey: Uint8Array,
+  password: string,
+): Promise<{ encrypted: string; salt: string }> {
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  const derivedKey = deriveKey(password, salt);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    derivedKey as unknown as ArrayBuffer,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"],
+  );
+  const nonce = derivedKey.slice(0, NONCE_LENGTH);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce },
+    cryptoKey,
+    privateKey.buffer as ArrayBuffer,
+  );
+  return {
+    encrypted: bytesToHex(new Uint8Array(ciphertext)),
+    salt: bytesToHex(salt),
+  };
+}
+
+export async function encryptPrivateKeyHex(
+  privateKeyHex: string,
+  password: string,
+): Promise<{ encrypted: string; salt: string }> {
+  return encryptPrivateKey(hexToBytes(privateKeyHex), password);
+}

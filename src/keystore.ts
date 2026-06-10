@@ -1,6 +1,6 @@
 import { detectPublicKeyCurve } from "./curve-detection.js";
 import { deriveAddress } from "./address.js";
-import { decryptPrivateKeyHex } from "./wallet.js";
+import { decryptPrivateKeyHex, encryptPrivateKeyHex } from "./wallet.js";
 import type { CurveType } from "./types.js";
 
 export interface GoKeystoreEntry {
@@ -50,4 +50,31 @@ export async function decryptEntry(
   password: string
 ): Promise<string> {
   return decryptPrivateKeyHex(entry.encryptedPrivateKey, entry.salt, password);
+}
+
+export interface NewKeyEntryArgs {
+  privateKeyHex: string;
+  publicKeyHex: string;
+  address: string;
+  curveType: CurveType;
+  nickname?: string;
+}
+
+/**
+ * Encrypt a freshly generated key into a ParsedKeystoreEntry — the same shape
+ * decryptEntry consumes, so created wallets unlock through the existing path.
+ */
+export async function encryptKeyEntry(
+  args: NewKeyEntryArgs,
+  password: string,
+): Promise<ParsedKeystoreEntry> {
+  const { encrypted, salt } = await encryptPrivateKeyHex(args.privateKeyHex, password);
+  return {
+    publicKey: args.publicKeyHex,
+    encryptedPrivateKey: encrypted,
+    salt,
+    address: args.address,
+    curveType: args.curveType,
+    nickname: args.nickname,
+  };
 }
