@@ -1,15 +1,20 @@
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { deriveAddress } from "./address.js";
-import { decryptEntry, importFromGoKeystore } from "./keystore.js";
+import { decryptEntry, importFromGoKeystore, encryptKeyEntry } from "./keystore.js";
 import { detectPublicKeyCurve } from "./curve-detection.js";
 import { createAndSignTransaction } from "./transaction.js";
+import { fetchKeystore } from "./rpc.js";
+import { generateKeyPair } from "./wallet.js";
 import type {
   CurveType,
   TransactionParams,
   WalletAccount,
+  UnlockedAccount,
+  LoadedAccount,
 } from "./types.js";
 import type { PluginTransaction } from "./transaction.js";
-import type { GoKeystoreEntry, ParsedKeystoreEntry } from "./keystore.js";
+import type { GoKeystoreEntry, ParsedKeystoreEntry, KeystoreStorage } from "./keystore.js";
+import type { RequestOptions } from "./http.js";
 
 /**
  * WalletManager — high-level wallet operations for Canopy blockchain transactions
@@ -23,6 +28,89 @@ import type { GoKeystoreEntry, ParsedKeystoreEntry } from "./keystore.js";
 export class WalletManager {
   private accounts: Map<string, WalletAccount> = new Map();
   private keystoreData: Map<string, ParsedKeystoreEntry> = new Map();
+  private storage?: KeystoreStorage;
+
+  constructor(opts: { storage?: KeystoreStorage } = {}) {
+    this.storage = opts.storage;
+  }
+
+  /** Cache a parsed entry into the account registry (node or local). */
+  private cacheEntry(entry: ParsedKeystoreEntry): void {
+    const address = entry.address.toLowerCase();
+    this.keystoreData.set(address, entry);
+    this.accounts.set(address, {
+      address,
+      publicKey: entry.publicKey,
+      curveType: entry.curveType,
+    });
+  }
+
+  /**
+   * Standalone: fetch the node keystore and merge any locally-created wallets
+   * from the injected storage. Returns a secrets-free list for the login UI.
+   */
+  async loadAccounts(opts: RequestOptions = {}): Promise<LoadedAccount[]> {
+    const nodeEntries = await fetchKeystore(opts);
+    this.accounts.clear();
+    this.keystoreData.clear();
+    for (const entry of nodeEntries) this.cacheEntry(entry);
+    for (const entry of this.storage?.load() ?? []) this.cacheEntry(entry);
+    return Array.from(this.keystoreData.values()).map((e) => ({
+      address: e.address,
+      nickname: e.nickname || e.address.slice(0, 8),
+    }));
+  }
+
+  /**
+   * Standalone: generate a new ed25519 wallet, encrypt it with `password`, save
+   * it to storage, cache it, and return the unlocked signer identity.
+   */
+  async createWallet(nickname: string, password: string): Promise<UnlockedAccount> {
+    if (!this.storage)
+      throw new Error("WalletManager: no storage configured for createWallet");
+    const kp = generateKeyPair();
+    const entry = await encryptKeyEntry(
+      {
+        privateKeyHex: kp.privateKeyHex,
+        publicKeyHex: kp.publicKeyHex,
+        address: kp.address,
+        curveType: kp.curveType,
+        nickname,
+      },
+      password,
+    );
+    this.storage.save(entry);
+    this.cacheEntry(entry);
+    return {
+      address: kp.address,
+      publicKeyHex: kp.publicKeyHex,
+      privateKeyHex: kp.privateKeyHex,
+      curveType: kp.curveType,
+    };
+  }
+
+  /**
+   * Standalone: import a pre-built encrypted entry (e.g. from a keystore JSON
+   * paste) into storage + cache.
+   */
+  importEntry(entry: ParsedKeystoreEntry): void {
+    if (this.storage) this.storage.save(entry);
+    this.cacheEntry(entry);
+  }
+
+  /** Decrypt a cached entry and return the full signer identity. */
+  async unlock(address: string, password: string): Promise<UnlockedAccount> {
+    const addr = address.toLowerCase();
+    const entry = this.keystoreData.get(addr);
+    if (!entry) throw new Error(`Account not found: ${address}`);
+    const privateKeyHex = await decryptEntry(entry, password);
+    return {
+      address: entry.address,
+      publicKeyHex: entry.publicKey,
+      privateKeyHex,
+      curveType: entry.curveType,
+    };
+  }
 
   /**
    * Load wallet accounts from Go keystore JSON format
