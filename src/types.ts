@@ -44,3 +44,17 @@ export interface WalletAccount {
   curveType: CurveType;
   credentials?: WalletCredentials;
 }
+
+/** A fully-unlocked signer identity (maps onto createAndSignTransaction args). */
+export interface UnlockedAccount {
+  address: string;
+  publicKeyHex: string;
+  privateKeyHex: string;
+  curveType: CurveType;
+}
+
+/** A selectable account for a login UI (no secrets). */
+export interface LoadedAccount {
+  address: string;
+  nickname: string;
+}

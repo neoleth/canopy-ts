@@ -78,3 +78,14 @@ export async function encryptKeyEntry(
     nickname: args.nickname,
   };
 }
+
+/**
+ * Pluggable persistence for locally-created keystore entries. Keeps the SDK
+ * environment-agnostic: the browser localStorage adapter lives in the app
+ * layer (casino-client) and is injected into WalletManager.
+ */
+export interface KeystoreStorage {
+  load(): ParsedKeystoreEntry[];
+  save(entry: ParsedKeystoreEntry): void;
+  remove(address: string): void;
+}
