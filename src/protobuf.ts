@@ -1,4 +1,4 @@
-import * as protobuf from "protobufjs";
+import protobuf from "protobufjs";
 import { hexToBytes } from "@noble/hashes/utils.js";
 
 function shouldOmit(value: any): boolean {
@@ -142,14 +142,17 @@ export function getSignBytesProtobuf(tx: {
   const transactionData: any = {
     message_type: tx.type,
     msg: anyMsg,
-    signature: null,
     created_height: tx.createdHeight,
     time: tx.time,
-    fee: tx.fee,
     network_id: tx.networkID,
     chain_id: tx.chainID,
   };
 
+  // Omit fee and memo when zero/empty — protobufjs encodes explicit zeros as non-default
+  // bytes (varint 0x00), but Go's proto3 marshal omits default-value fields entirely.
+  if (!shouldOmit(tx.fee)) {
+    transactionData.fee = tx.fee;
+  }
   if (!shouldOmit(tx.memo)) {
     transactionData.memo = tx.memo;
   }
