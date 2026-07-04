@@ -30,11 +30,3 @@ export { createAndSignTransaction } from "./transaction.js";
 export type { PluginTransaction } from "./transaction.js";
 
 export { hexToBytes, bytesToHex } from "@noble/hashes/utils.js";
-
-export {
-  verifyCommitment,
-  computeHMAC,
-  computeDiceRoll,
-  verifyDiceRoll,
-  computeCrashPoint,
-} from "./provably-fair.js";
