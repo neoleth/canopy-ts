@@ -1,4 +1,4 @@
-import * as protobuf from "protobufjs";
+import protobuf from "protobufjs";
 import type {
   FrameCodec,
   GameTransport,
@@ -147,21 +147,36 @@ export class ChannelRouter {
     let frame: protobuf.Message & { channel?: string; payload?: Uint8Array };
     try {
       frame = this.frameType.decode(new Uint8Array(data)) as typeof frame;
-    } catch {
-      return; // not a Frame — ignore (e.g. stray legacy binary)
+    } catch (err) {
+      console.error("[ChannelRouter] ws.Frame decode failed:", err);
+      return;
     }
     const channel = frame.channel ?? "";
     const payload = frame.payload ?? new Uint8Array(0);
 
     if (channel === "") {
       if (!this.systemHandler) return;
-      this.systemHandler(this.systemType.decode(payload));
+      try {
+        this.systemHandler(this.systemType.decode(payload));
+      } catch (err) {
+        console.error("[ChannelRouter] ws.System decode failed:", err);
+      }
       return;
     }
     const codec = this.codecs.get(channel);
     const handler = this.handlers.get(channel);
-    if (!codec || !handler) return; // not subscribed to this channel
-    handler(codec.decode(payload));
+    if (!codec || !handler) {
+      console.warn(`[ChannelRouter] no codec/handler for channel "${channel}" (registered: ${[...this.codecs.keys()].join(", ") || "none"})`);
+      return;
+    }
+    let envelope: protobuf.Message;
+    try {
+      envelope = codec.decode(payload);
+    } catch (err) {
+      console.error(`[ChannelRouter] envelope decode failed on channel "${channel}":`, err);
+      return;
+    }
+    handler(envelope);
   }
 
   private wrap(channel: string, payload: Uint8Array): ArrayBuffer {

@@ -138,6 +138,15 @@ export class DirectTransport implements GameTransport {
   }
 
   private openSocket(): void {
+    // Detach and close any existing socket before creating a new one.
+    // Without this, the orphaned old WebSocket is GC'd and sends a close
+    // frame to the server — appearing as a spurious client_close_frame.
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.close();
+      this.ws = null;
+    }
     const ws = new WebSocket(this.wsUrl);
     ws.binaryType = "arraybuffer";
     this.ws = ws;
@@ -190,15 +199,20 @@ export class DirectTransport implements GameTransport {
     let frame: { channel: string; payload: Uint8Array };
     try {
       frame = this.frameCodec.decode(new Uint8Array(data));
-    } catch {
-      return; // not a Frame — ignore
+    } catch (err) {
+      console.error("[DirectTransport] ws.Frame decode failed during handshake:", err);
+      return;
     }
-    if (frame.channel !== "") return; // only control-plane during handshake
+    if (frame.channel !== "") {
+      console.warn(`[DirectTransport] game-channel message on "${frame.channel}" dropped — auth not complete yet`);
+      return;
+    }
 
     let system: ReturnType<SystemCodec["decode"]>;
     try {
       system = this.systemCodec.decode(frame.payload);
-    } catch {
+    } catch (err) {
+      console.error("[DirectTransport] ws.System decode failed during handshake:", err);
       return;
     }
 
