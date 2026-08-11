@@ -7,6 +7,8 @@
  * into whichever src/rpc.ts function they need (see withFailover in a later
  * task), so it doesn't need updating every time rpc.ts gains a new query.
  */
+import { RpcError, TimeoutError } from "./errors.js";
+import type { RequestOptions } from "./http.js";
 
 /** Configuration for a single Canopy node. */
 export interface NodeEntry {
@@ -76,5 +78,70 @@ export class NodePool {
   /** Append a new node to the pool. */
   addNode(entry: NodeEntry): void {
     this.nodes.push(entry);
+  }
+
+  private isRetryable(err: unknown): boolean {
+    if (err instanceof TimeoutError) return true;
+    if (err instanceof RpcError) {
+      // status undefined = network-level failure (never reached the server) —
+      // retryable. status >= 500 = server error — retryable. 4xx = the
+      // request reached a working node and was rejected on its merits —
+      // rotating elsewhere won't help and would mask the real error.
+      return err.status === undefined || err.status >= 500;
+    }
+    return true; // unknown error shape (e.g. raw TypeError from fetch) — treat as transient
+  }
+
+  /**
+   * Run `fn` against the current node, handling automatic-mode rotation or
+   * pinned-mode single-node retry. `fn` receives {baseUrl} (and any other
+   * RequestOptions this method sets) — pass it straight into an rpc.ts
+   * function: `pool.withFailover(opts => fetchHeight(opts))`.
+   *
+   * Node-local retry (src/http.ts's own retry/backoff) is disabled for calls
+   * made through withFailover — rotation across nodes IS the retry strategy
+   * here, mirroring canopy-mcp's combined retry+failover loop rather than
+   * layering two independent retry mechanisms.
+   */
+  async withFailover<T>(
+    fn: (opts: RequestOptions) => Promise<T>,
+    options: { admin?: boolean } = {},
+  ): Promise<T> {
+    const admin = options.admin ?? false;
+
+    if (this.pinnedIndex !== null) {
+      const node = this.nodes[this.pinnedIndex];
+      const baseUrl = (admin ? node.adminRpc : undefined) ?? node.rpc;
+      try {
+        return await fn({ baseUrl, retry: false });
+      } catch (e) {
+        throw new Error(
+          `Pinned node '${node.name}' failed: ${e instanceof Error ? e.message : String(e)}. ` +
+            `Call resetNodes() for automatic mode or selectNode() to try a different node.`,
+          { cause: e },
+        );
+      }
+    }
+
+    const enabled = this.enabledNodes();
+    if (enabled.length === 0) throw new Error("NodePool: no enabled nodes configured");
+
+    let lastError: unknown;
+    for (let attempt = 0; attempt < enabled.length; attempt++) {
+      const node = enabled[this.currentIndex % enabled.length];
+      const baseUrl = (admin ? node.adminRpc : undefined) ?? node.rpc;
+      try {
+        return await fn({ baseUrl, retry: false });
+      } catch (e) {
+        lastError = e;
+        if (!this.isRetryable(e)) throw e;
+        this.currentIndex = (this.currentIndex + 1) % enabled.length;
+      }
+    }
+
+    throw new Error(
+      `All ${enabled.length} RPC endpoints failed. Last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+      { cause: lastError },
+    );
   }
 }

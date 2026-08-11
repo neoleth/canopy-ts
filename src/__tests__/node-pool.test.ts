@@ -66,3 +66,114 @@ describe("NodePool — list/current/select/reset/add", () => {
     expect(() => pool.currentNode()).toThrow(/no enabled nodes/);
   });
 });
+
+// APPEND — src/__tests__/node-pool.test.ts
+import { RpcError, TimeoutError } from "../errors.js";
+import { fetchHeight } from "../rpc.js";
+import { vi, afterEach } from "vitest";
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+describe("NodePool.withFailover — automatic mode", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("uses the first enabled node when it succeeds", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2" },
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ height: 42 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const height = await pool.withFailover((opts) => fetchHeight(opts));
+
+    expect(height).toBe(42);
+    expect(fetchMock.mock.calls[0][0]).toBe("http://n1/v1/query/height");
+  });
+
+  it("rotates to the next enabled node on a connection failure", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2" },
+    ]);
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(jsonResponse({ height: 7 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const height = await pool.withFailover((opts) => fetchHeight(opts));
+
+    expect(height).toBe(7);
+    expect(fetchMock.mock.calls[0][0]).toBe("http://n1/v1/query/height");
+    expect(fetchMock.mock.calls[1][0]).toBe("http://n2/v1/query/height");
+  });
+
+  it("rotates on a 5xx response", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2" },
+    ]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("boom", { status: 503 }))
+      .mockResolvedValueOnce(jsonResponse({ height: 9 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const height = await pool.withFailover((opts) => fetchHeight(opts));
+
+    expect(height).toBe(9);
+  });
+
+  it("does NOT rotate on a 4xx response — propagates immediately", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2" },
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue(new Response("bad request", { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(pool.withFailover((opts) => fetchHeight(opts))).rejects.toThrow(RpcError);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // no rotation attempted
+  });
+
+  it("skips disabled nodes when rotating", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2", enabled: false },
+      { name: "n3", rpc: "http://n3" },
+    ]);
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(jsonResponse({ height: 3 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const height = await pool.withFailover((opts) => fetchHeight(opts));
+
+    expect(height).toBe(3);
+    expect(fetchMock.mock.calls[1][0]).toBe("http://n3/v1/query/height"); // skipped n2
+  });
+
+  it("throws after exhausting every enabled node", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2" },
+    ]);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    await expect(pool.withFailover((opts) => fetchHeight(opts))).rejects.toThrow(/All \d+ RPC endpoints failed/);
+  });
+
+  it("uses adminRpc when admin: true is passed", async () => {
+    const pool = new NodePool([{ name: "n1", rpc: "http://n1", adminRpc: "http://n1-admin" }]);
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ height: 1 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await pool.withFailover((opts) => fetchHeight(opts), { admin: true });
+
+    expect(fetchMock.mock.calls[0][0]).toBe("http://n1-admin/v1/query/height");
+  });
+});
