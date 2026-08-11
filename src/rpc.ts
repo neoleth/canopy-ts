@@ -446,3 +446,61 @@ export async function txsByRecipient(
     ...params.toDict(),
   }, requestOpts);
 }
+
+/**
+ * Get unconfirmed mempool transactions.
+ *
+ * Args:
+ *   opts: Request options including optional pageParams
+ *
+ * Returns:
+ *   Dict with pending transactions list and pagination info
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function pending(
+  opts: RequestOptions & { pageParams?: PageParams } = {},
+): Promise<Record<string, any>> {
+  const { pageParams, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("pending", "/v1/query/pending", params.toDict(), requestOpts);
+}
+
+/**
+ * Look up multiple accounts concurrently in one call.
+ *
+ * Runs account(...) for every address concurrently via Promise.all.
+ * One address's failure does not abort the others: a failed lookup produces
+ * an {address: ..., error: ...} entry in its place rather than throwing.
+ *
+ * Args:
+ *   addresses: List of hex addresses (40 characters each)
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   List of dicts, one per input address, in the same order as addresses.
+ *   Each is either account()'s result with "address" merged in, or
+ *   {address: <addr>, error: <str>} if that lookup failed.
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures (for the batch itself, not individual addresses)
+ */
+export async function accountsBatch(
+  addresses: string[],
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Array<Record<string, any>>> {
+  const { height = 0, ...requestOpts } = opts;
+
+  async function queryOne(address: string): Promise<Record<string, any>> {
+    try {
+      const result = await account(address, { height, ...requestOpts });
+      return { ...result, address };
+    } catch (e) {
+      return { address, error: String(e) };
+    }
+  }
+
+  return Promise.all(addresses.map(queryOne));
+}
