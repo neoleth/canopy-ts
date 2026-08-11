@@ -22,8 +22,8 @@ import { fetchHeight } from "@canopynetwork/canopy-ts/rpc";
 ```
 
 Importing from the package root works too, but pulls in every subpath's
-dependencies (protobufjs, zod, noble-curves) even if you
-only need one of them:
+dependencies (protobufjs, zod, noble-curves) even if you only need one of
+them:
 
 ```ts
 import { generateKeyPair, fetchHeight } from "@canopynetwork/canopy-ts";

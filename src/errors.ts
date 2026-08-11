@@ -61,5 +61,5 @@ export class ResponseValidationError extends CanopyError {
   }
 }
 
-/** A WebSocket transport operation failed (e.g. send while disconnected). */
+/** A transport-layer operation failed. Reserved; no current SDK code path throws this. */
 export class TransportError extends CanopyError {}

@@ -13,8 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `transport.ts`, `channel-router.ts` (and their test), the `./ws` and
   `./proto/*` package exports, the `publishedWsProtos` manifest, and the
   `copy-ws-protos` postbuild step are gone. The code is preserved as-is on
-  the local `websocket-transport` branch. `protobufjs` remains a dependency
-  — `protobuf.ts` still uses it for transaction encoding.
+  the local `websocket-transport` branch. Consumers of the `./ws` subpath
+  should pin `@canopynetwork/canopy-ts@0.8.0`, the last release that includes
+  it. `protobufjs` remains a dependency — `protobuf.ts` still uses it for
+  transaction encoding.
 
 ## [0.8.0] - 2026-08-11
 
