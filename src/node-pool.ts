@@ -9,6 +9,7 @@
  */
 import { RpcError, TimeoutError } from "./errors.js";
 import type { RequestOptions } from "./http.js";
+import { fetchHeight } from "./rpc.js";
 
 /** Configuration for a single Canopy node. */
 export interface NodeEntry {
@@ -143,5 +144,30 @@ export class NodePool {
       `All ${enabled.length} RPC endpoints failed. Last error: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
       { cause: lastError },
     );
+  }
+
+  /**
+   * Query /v1/query/height on every configured node (including disabled
+   * ones — this is a diagnostic sweep, not automatic-mode routing) and
+   * report per-node reachability. Runs concurrently.
+   */
+  async healthCheckAll(
+    opts: { timeoutMs?: number } = {},
+  ): Promise<Record<string, { ok: boolean; height?: number; error?: string }>> {
+    const entries = await Promise.all(
+      this.nodes.map(async (node) => {
+        try {
+          const height = await fetchHeight({
+            baseUrl: node.rpc,
+            timeoutMs: opts.timeoutMs ?? 5000,
+            retry: false,
+          });
+          return [node.name, { ok: true, height }] as const;
+        } catch (e) {
+          return [node.name, { ok: false, error: e instanceof Error ? e.message : String(e) }] as const;
+        }
+      }),
+    );
+    return Object.fromEntries(entries);
   }
 }

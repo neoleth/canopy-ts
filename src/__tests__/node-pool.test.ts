@@ -225,3 +225,40 @@ describe("NodePool.withFailover — pinned mode", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("http://n1/v1/query/height"); // back to automatic, starting at n1
   });
 });
+
+// APPEND — src/__tests__/node-pool.test.ts
+
+describe("NodePool.healthCheckAll", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("reports ok + height for a healthy node and ok:false + error for a failing one", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2" },
+    ]);
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith("http://n1")) return Promise.resolve(jsonResponse({ height: 100 }));
+      return Promise.reject(new TypeError("fetch failed"));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const results = await pool.healthCheckAll();
+
+    expect(results.n1).toEqual({ ok: true, height: 100 });
+    expect(results.n2.ok).toBe(false);
+    expect(typeof results.n2.error).toBe("string");
+  });
+
+  it("checks every node, including disabled ones (health check is diagnostic, not automatic-mode routing)", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2", enabled: false },
+    ]);
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ height: 1 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const results = await pool.healthCheckAll();
+
+    expect(Object.keys(results).sort()).toEqual(["n1", "n2"]);
+  });
+});
