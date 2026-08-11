@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tree-shaking through type-only imports.
 - README with quick-start examples for keys/wallets, keystore, RPC, WebSocket,
   and multi-node failover.
+- `paginate()` — wraps any paginated RPC query function (`validators`,
+  `committee`, `txsByHeight`, `eventsByAddress`, ...) into an async iterable,
+  so consumers can `for await...of` an entire list instead of manually
+  advancing `PageParams` page by page.
 
 ### Fixed
 

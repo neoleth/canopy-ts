@@ -90,6 +90,53 @@ export function PageSchema<T>(itemSchema: z.ZodType<T>): z.ZodType<{ results: T[
   }).passthrough();
 }
 
+/**
+ * Turn any of this module's paginated query functions into an async
+ * iterable that yields individual items, automatically advancing through
+ * pages — hides the page/per_page cursor plumbing behind a plain
+ * `for await...of` loop instead of manual page-by-page calls.
+ *
+ * Works with any paginated function here (`validators`, `committee`,
+ * `txsByHeight`, `eventsByAddress`, ...) — since each takes its own
+ * positional args before `opts`, wrap it in a closure that only exposes the
+ * `opts` parameter this helper drives:
+ *
+ * ```ts
+ * for await (const v of paginate(opts => validators(opts))) {
+ *   console.log(v);
+ * }
+ *
+ * for await (const e of paginate(opts => eventsByAddress(address, opts), { pageParams: { per_page: 50 } })) {
+ *   console.log(e);
+ * }
+ * ```
+ *
+ * Stops when a page returns fewer than `per_page` results — the standard
+ * last-page signal for offset/page pagination — or an empty/missing
+ * `results` array. Does not itself validate the response shape; malformed
+ * responses (missing/non-array `results`) are treated as an empty final
+ * page rather than thrown, since the underlying query functions don't
+ * currently validate pagination responses against {@link PageSchema} either.
+ */
+export async function* paginate<T = unknown>(
+  fetchPage: (opts: RequestOptions & { pageParams?: PageParams }) => Promise<Record<string, any>>,
+  init: { pageParams?: PageParamsOptions; requestOptions?: RequestOptions } = {},
+): AsyncGenerator<T, void, undefined> {
+  const perPage = init.pageParams?.per_page ?? 20;
+  let page = init.pageParams?.page ?? 1;
+
+  for (;;) {
+    const pageParams = new PageParams({ ...init.pageParams, page, per_page: perPage });
+    const response = await fetchPage({ ...init.requestOptions, pageParams });
+    const results: T[] = Array.isArray(response?.results) ? response.results : [];
+
+    for (const item of results) yield item;
+
+    if (results.length < perPage) return;
+    page += 1;
+  }
+}
+
 /** Validate a parsed JSON body against a schema, throwing ResponseValidationError on mismatch. */
 function validate<T>(label: string, schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);

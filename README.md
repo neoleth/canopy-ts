@@ -83,7 +83,21 @@ const height = await fetchHeight({ baseUrl: "https://node.example.com" });
 ```
 
 Most list endpoints accept a `pageParams` option built from `PageParams`
-(`{ page, per_page }`) for pagination.
+(`{ page, per_page }`) for pagination. For consuming an entire list without
+manually advancing pages yourself, wrap the call in `paginate()`:
+
+```ts
+import { paginate, validators, eventsByAddress } from "@canopynetwork/canopy-ts/rpc";
+
+for await (const v of paginate(opts => validators(opts))) {
+  console.log(v);
+}
+
+// works with any paginated function — wrap it in a closure exposing only `opts`
+for await (const e of paginate(opts => eventsByAddress(address, opts), { pageParams: { per_page: 50 } })) {
+  console.log(e);
+}
+```
 
 ### Multi-node failover
 
