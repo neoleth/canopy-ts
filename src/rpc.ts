@@ -600,3 +600,97 @@ export async function subsidizedCommittees(
     height,
   }, requestOpts);
 }
+
+/**
+ * Get events for an address.
+ *
+ * Args:
+ *   address: Hex address (40 characters)
+ *   opts: Request options including optional pageParams
+ *
+ * Returns:
+ *   Dict with events list and pagination info
+ *
+ * Throws:
+ *   ValueError: If address format is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function eventsByAddress(
+  address: string,
+  opts: RequestOptions & { pageParams?: PageParams } = {},
+): Promise<Record<string, any>> {
+  if (typeof address !== "string" || ![40, 42].includes(address.length)) {
+    throw new Error(`Invalid address format: ${address}`);
+  }
+
+  let normalizedAddr = address;
+  if (normalizedAddr.startsWith("0x") || normalizedAddr.startsWith("0X")) {
+    normalizedAddr = normalizedAddr.slice(2);
+  }
+  normalizedAddr = normalizedAddr.toLowerCase();
+
+  const { pageParams, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("eventsByAddress", "/v1/query/events-by-address", {
+    address: normalizedAddr,
+    ...params.toDict(),
+  }, requestOpts);
+}
+
+/**
+ * Get events for a chain/committee ID.
+ *
+ * Args:
+ *   chainId: Chain/committee ID
+ *   opts: Request options including optional pageParams
+ *
+ * Returns:
+ *   Dict with events list and pagination info
+ *
+ * Throws:
+ *   ValueError: If chain_id is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function eventsByChain(
+  chainId: number,
+  opts: RequestOptions & { pageParams?: PageParams } = {},
+): Promise<Record<string, any>> {
+  if (typeof chainId !== "number" || chainId < 0) {
+    throw new Error(`Invalid chain ID: ${chainId}`);
+  }
+
+  const { pageParams, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("eventsByChain", "/v1/query/events-by-chain", {
+    id: chainId,
+    ...params.toDict(),
+  }, requestOpts);
+}
+
+/**
+ * Get events at a specific block height.
+ *
+ * Args:
+ *   height: Block height (0 = latest committed height)
+ *   opts: Request options including optional pageParams
+ *
+ * Returns:
+ *   Dict with events list and pagination info
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function eventsByHeight(
+  height: number = 0,
+  opts: RequestOptions & { pageParams?: PageParams } = {},
+): Promise<Record<string, any>> {
+  const { pageParams, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("eventsByHeight", "/v1/query/events-by-height", {
+    height,
+    ...params.toDict(),
+  }, requestOpts);
+}
