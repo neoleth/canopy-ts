@@ -504,3 +504,99 @@ export async function accountsBatch(
 
   return Promise.all(addresses.map(queryOne));
 }
+
+/**
+ * Get committee data for a specific chain/committee ID.
+ *
+ * Args:
+ *   committeeId: Committee/chain ID
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   Dict with committee data (last chain height, last root height, etc.)
+ *
+ * Throws:
+ *   ValueError: If committee_id is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function committeeData(
+  committeeId: number,
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  if (typeof committeeId !== "number" || committeeId < 0) {
+    throw new Error(`Invalid committee ID: ${committeeId}`);
+  }
+
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("committeeData", "/v1/query/committee-data", {
+    id: committeeId,
+    height,
+  }, requestOpts);
+}
+
+/**
+ * Get committee data for all chains/committees.
+ *
+ * Args:
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   Dict with all committees' data
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function committeesData(
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("committeesData", "/v1/query/committees-data", {
+    height,
+  }, requestOpts);
+}
+
+/**
+ * Get list of retired committee/chain IDs.
+ *
+ * Args:
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   List of retired chain IDs
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function retiredCommittees(
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("retiredCommittees", "/v1/query/retired-committees", {
+    height,
+  }, requestOpts);
+}
+
+/**
+ * Get list of chain IDs that receive a portion of the block reward.
+ *
+ * Args:
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   List of subsidized chain IDs
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function subsidizedCommittees(
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("subsidizedCommittees", "/v1/query/subsidized-committees", {
+    height,
+  }, requestOpts);
+}
