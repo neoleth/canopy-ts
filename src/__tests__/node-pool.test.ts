@@ -47,6 +47,12 @@ describe("NodePool — list/current/select/reset/add", () => {
     expect(() => pool.selectNode(99)).toThrow(/out of range/);
   });
 
+  it("selectNode throws on a non-integer index (e.g. NaN from an unguarded parseInt)", () => {
+    const pool = new NodePool(NODES);
+    expect(() => pool.selectNode(Number.NaN)).toThrow(/out of range/);
+    expect(() => pool.selectNode(1.5)).toThrow(/out of range/);
+  });
+
   it("resetNodes clears the pin and returns to automatic mode", () => {
     const pool = new NodePool(NODES);
     pool.selectNode("dev-node-2");
@@ -208,6 +214,21 @@ describe("NodePool.withFailover — pinned mode", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
 
     await expect(pool.withFailover((opts) => fetchHeight(opts))).rejects.toThrow(/Pinned node 'n1' failed/);
+  });
+
+  it("preserves RpcError's type and status when the pinned node rejects the request", async () => {
+    const pool = new NodePool([{ name: "n1", rpc: "http://n1" }]);
+    pool.selectNode("n1");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("bad request", { status: 400 })));
+
+    await expect(pool.withFailover((opts) => fetchHeight(opts))).rejects.toThrow(RpcError);
+    try {
+      await pool.withFailover((opts) => fetchHeight(opts));
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(RpcError);
+      expect((e as RpcError).status).toBe(400);
+    }
   });
 
   it("resetNodes restores automatic round-robin after a pin", async () => {

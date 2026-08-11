@@ -44,7 +44,11 @@ export class NodePool {
   /** The node the next automatic-mode call would use, or the pinned node if one is set. */
   currentNode(): NodeEntry {
     if (this.pinnedIndex !== null) return this.nodes[this.pinnedIndex];
-    const enabled = this.enabledNodes();
+    return this.pickEnabled(this.enabledNodes());
+  }
+
+  /** Guard + round-robin index lookup shared by currentNode() and withFailover()'s automatic loop. */
+  private pickEnabled(enabled: NodeEntry[]): NodeEntry {
     if (enabled.length === 0) throw new Error("NodePool: no enabled nodes configured");
     return enabled[this.currentIndex % enabled.length];
   }
@@ -57,7 +61,7 @@ export class NodePool {
     let index: number;
     if (typeof nameOrIndex === "number") {
       index = nameOrIndex;
-      if (index < 0 || index >= this.nodes.length) {
+      if (!Number.isInteger(index) || index < 0 || index >= this.nodes.length) {
         throw new Error(`Node index out of range: ${nameOrIndex} (have ${this.nodes.length} nodes)`);
       }
     } else {
@@ -95,14 +99,18 @@ export class NodePool {
 
   /**
    * Run `fn` against the current node, handling automatic-mode rotation or
-   * pinned-mode single-node retry. `fn` receives {baseUrl} (and any other
+   * pinned-mode single-node dispatch. `fn` receives {baseUrl} (and any other
    * RequestOptions this method sets) — pass it straight into an rpc.ts
    * function: `pool.withFailover(opts => fetchHeight(opts))`.
    *
+   * Pinned mode makes exactly one attempt and does not retry — there's only
+   * one node to try, so a failure there is terminal. Call resetNodes() for
+   * automatic-mode rotation or selectNode() to pin elsewhere.
+   *
    * Node-local retry (src/http.ts's own retry/backoff) is disabled for calls
    * made through withFailover — rotation across nodes IS the retry strategy
-   * here, mirroring canopy-mcp's combined retry+failover loop rather than
-   * layering two independent retry mechanisms.
+   * in automatic mode, mirroring canopy-mcp's combined retry+failover loop
+   * rather than layering two independent retry mechanisms.
    */
   async withFailover<T>(
     fn: (opts: RequestOptions) => Promise<T>,
@@ -116,6 +124,14 @@ export class NodePool {
       try {
         return await fn({ baseUrl, retry: false });
       } catch (e) {
+        // Preserve RpcError's type and fields (status, etc.) when the node
+        // actually responded — same case automatic mode's non-retryable path
+        // (below) rethrows untouched — so callers can `instanceof`-check it
+        // the same way in both modes. A network-level failure (RpcError with
+        // no status — never reached the server) or an unknown error shape
+        // still gets the friendlier pinned-node-guidance wrapper below, since
+        // it carries no server-side detail worth preserving on its own.
+        if ((e instanceof RpcError && e.status !== undefined) || e instanceof TimeoutError) throw e;
         throw new Error(
           `Pinned node '${node.name}' failed: ${e instanceof Error ? e.message : String(e)}. ` +
             `Call resetNodes() for automatic mode or selectNode() to try a different node.`,
@@ -129,7 +145,7 @@ export class NodePool {
 
     let lastError: unknown;
     for (let attempt = 0; attempt < enabled.length; attempt++) {
-      const node = enabled[this.currentIndex % enabled.length];
+      const node = this.pickEnabled(enabled);
       const baseUrl = (admin ? node.adminRpc : undefined) ?? node.rpc;
       try {
         return await fn({ baseUrl, retry: false });

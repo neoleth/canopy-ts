@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `NodePool.withFailover()` in pinned mode now preserves `RpcError`'s type
+  and `status` when the pinned node actually responded (e.g. a 404), instead
+  of always discarding it into a generic wrapper `Error` — `instanceof
+  RpcError` checks now work the same in pinned mode as they already did in
+  automatic mode.
+- `NodePool.selectNode(index)` now rejects non-integer input (e.g. `NaN`
+  from an unguarded `parseInt`) instead of silently accepting it and
+  crashing later on the next lookup.
+- Corrected the `withFailover()` doc comment, which claimed pinned mode does
+  "single-node retry" — it makes exactly one attempt and does not retry.
+
 ## [0.8.0] - 2026-08-11
 
 ### Breaking Changes
