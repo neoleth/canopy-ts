@@ -177,3 +177,51 @@ describe("NodePool.withFailover — automatic mode", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("http://n1-admin/v1/query/height");
   });
 });
+
+// APPEND — src/__tests__/node-pool.test.ts
+
+describe("NodePool.withFailover — pinned mode", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("only calls the pinned node, even when other nodes exist", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2" },
+    ]);
+    pool.selectNode("n2");
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ height: 5 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const height = await pool.withFailover((opts) => fetchHeight(opts));
+
+    expect(height).toBe(5);
+    expect(fetchMock.mock.calls[0][0]).toBe("http://n2/v1/query/height");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not rotate to another node on failure — throws with pinned-node context", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2" },
+    ]);
+    pool.selectNode("n1");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    await expect(pool.withFailover((opts) => fetchHeight(opts))).rejects.toThrow(/Pinned node 'n1' failed/);
+  });
+
+  it("resetNodes restores automatic round-robin after a pin", async () => {
+    const pool = new NodePool([
+      { name: "n1", rpc: "http://n1" },
+      { name: "n2", rpc: "http://n2" },
+    ]);
+    pool.selectNode("n2");
+    pool.resetNodes();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ height: 1 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await pool.withFailover((opts) => fetchHeight(opts));
+
+    expect(fetchMock.mock.calls[0][0]).toBe("http://n1/v1/query/height"); // back to automatic, starting at n1
+  });
+});
