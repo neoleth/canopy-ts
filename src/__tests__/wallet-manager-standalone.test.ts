@@ -108,4 +108,48 @@ describe("WalletManager standalone", () => {
     const wm = new WalletManager({ storage: fakeStorage() });
     expect(() => wm.deleteAccount("aa".repeat(20))).toThrow(/Account not found/);
   });
+
+  it("exportEncryptedEntry re-encrypts under a new password without leaking plaintext", async () => {
+    const kp = generateKeyPair();
+    const entry = await encryptKeyEntry(
+      { privateKeyHex: kp.privateKeyHex, publicKeyHex: kp.publicKeyHex, address: kp.address, curveType: kp.curveType, nickname: "mine" },
+      "current-pw",
+    );
+    const storage = fakeStorage();
+    storage.save(entry);
+    vi.mocked(fetchKeystore).mockResolvedValue([]);
+
+    const wm = new WalletManager({ storage });
+    await wm.loadAccounts();
+
+    const exported = await wm.exportEncryptedEntry(kp.address, "current-pw", "export-pw");
+
+    expect(exported.address).toBe(kp.address);
+    expect(exported.publicKey).toBe(kp.publicKeyHex);
+    expect(exported.nickname).toBe("mine");
+    expect(exported.encryptedPrivateKey).not.toBe(entry.encryptedPrivateKey); // re-encrypted, different ciphertext
+    expect(JSON.stringify(exported)).not.toContain(kp.privateKeyHex); // no plaintext leak
+
+    // The exported entry decrypts correctly under the NEW password.
+    const wm2 = new WalletManager({ storage: fakeStorage() });
+    wm2.importEntry(exported);
+    const unlocked = await wm2.unlock(kp.address, "export-pw");
+    expect(unlocked.privateKeyHex).toBe(kp.privateKeyHex);
+  });
+
+  it("exportEncryptedEntry throws on wrong current password", async () => {
+    const kp = generateKeyPair();
+    const entry = await encryptKeyEntry(
+      { privateKeyHex: kp.privateKeyHex, publicKeyHex: kp.publicKeyHex, address: kp.address, curveType: kp.curveType },
+      "current-pw",
+    );
+    const storage = fakeStorage();
+    storage.save(entry);
+    vi.mocked(fetchKeystore).mockResolvedValue([]);
+
+    const wm = new WalletManager({ storage });
+    await wm.loadAccounts();
+
+    await expect(wm.exportEncryptedEntry(kp.address, "wrong-pw", "export-pw")).rejects.toThrow();
+  });
 });

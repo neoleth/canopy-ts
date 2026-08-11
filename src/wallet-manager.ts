@@ -256,4 +256,39 @@ export class WalletManager {
     this.accounts.delete(addr);
     this.keystoreData.delete(addr);
   }
+
+  /**
+   * Re-encrypt a stored entry under a caller-supplied export password and
+   * return it — a complete ParsedKeystoreEntry, paste-ready for import into
+   * another WalletManager/keystore.json. No plaintext private key crosses
+   * this call's boundary: it's decrypted in-process with `currentPassword`
+   * and immediately re-encrypted with `exportPassword` before returning.
+   *
+   * @param address - Account address to export
+   * @param currentPassword - Password this entry is currently encrypted under
+   * @param exportPassword - Password the returned entry should be encrypted
+   *   under (may be the same as currentPassword or different)
+   * @throws if the address isn't loaded, or currentPassword is wrong
+   */
+  async exportEncryptedEntry(
+    address: string,
+    currentPassword: string,
+    exportPassword: string,
+  ): Promise<ParsedKeystoreEntry> {
+    const addr = address.toLowerCase();
+    const entry = this.keystoreData.get(addr);
+    if (!entry) throw new Error(`Account not found: ${address}`);
+
+    const privateKeyHex = await decryptEntry(entry, currentPassword);
+    return encryptKeyEntry(
+      {
+        privateKeyHex,
+        publicKeyHex: entry.publicKey,
+        address: entry.address,
+        curveType: entry.curveType,
+        nickname: entry.nickname,
+      },
+      exportPassword,
+    );
+  }
 }
