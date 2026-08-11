@@ -278,3 +278,71 @@ export async function blockByHash(
     hash: blockHash,
   }, opts);
 }
+
+/**
+ * Get transaction by hash.
+ *
+ * Args:
+ *   txHash: Transaction hash (64 character hex)
+ *   opts: Request options
+ *
+ * Returns:
+ *   Dict with transaction data
+ *
+ * Throws:
+ *   ValueError: If hash format is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function txByHash(
+  txHash: string,
+  opts: RequestOptions = {},
+): Promise<Record<string, any>> {
+  if (typeof txHash !== "string" || txHash.length !== 64) {
+    throw new Error(`Invalid transaction hash format: ${txHash}`);
+  }
+
+  return postQuery("txByHash", "/v1/query/tx-by-hash", {
+    hash: txHash,
+  }, opts);
+}
+
+/**
+ * Get failed mempool transactions for an address.
+ *
+ * Note: there is no global index of failed transactions because Canopy
+ * does not include failed transactions in blocks - this only reflects
+ * transactions that failed locally.
+ *
+ * Args:
+ *   address: Hex address of the sender (40 characters)
+ *   opts: Request options including optional pageParams
+ *
+ * Returns:
+ *   Dict with failed-txs list, error details, and pagination info
+ *
+ * Throws:
+ *   ValueError: If address format is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function failedTxs(
+  address: string,
+  opts: RequestOptions & { pageParams?: PageParams } = {},
+): Promise<Record<string, any>> {
+  if (typeof address !== "string" || ![40, 42].includes(address.length)) {
+    throw new Error(`Invalid address format: ${address}`);
+  }
+
+  let normalizedAddr = address;
+  if (normalizedAddr.startsWith("0x") || normalizedAddr.startsWith("0X")) {
+    normalizedAddr = normalizedAddr.slice(2);
+  }
+  normalizedAddr = normalizedAddr.toLowerCase();
+
+  const { pageParams, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("failedTxs", "/v1/query/failed-txs", {
+    address: normalizedAddr,
+    ...params.toDict(),
+  }, requestOpts);
+}
