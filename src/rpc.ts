@@ -754,3 +754,69 @@ export async function validators(
     height,
   }, requestOpts);
 }
+
+/**
+ * Get token supply information.
+ *
+ * Args:
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   Dict with total supply, burned, etc.
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function supply(
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("supply", "/v1/query/supply", {
+    height,
+  }, requestOpts);
+}
+
+/**
+ * Get network governance parameters.
+ *
+ * Args:
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   Dict with fee params, gov params, consensus params, etc.
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function params(
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("params", "/v1/query/params", {
+    height,
+  }, requestOpts);
+}
+
+/**
+ * Get current network fee parameters.
+ *
+ * Args:
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   Dict with fee information (min_fee, base_fee, etc.)
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function fees(
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("fees", "/v1/query/fee-params", {
+    height,
+  }, requestOpts);
+}
