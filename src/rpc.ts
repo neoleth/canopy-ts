@@ -346,3 +346,103 @@ export async function failedTxs(
     ...params.toDict(),
   }, requestOpts);
 }
+
+/**
+ * Get transactions at a specific block height.
+ *
+ * Args:
+ *   height: Block height (0 = latest committed height)
+ *   opts: Request options including optional pageParams
+ *
+ * Returns:
+ *   Dict with transactions list and pagination info
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function txsByHeight(
+  height: number = 0,
+  opts: RequestOptions & { pageParams?: PageParams } = {},
+): Promise<Record<string, any>> {
+  const { pageParams, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("txsByHeight", "/v1/query/txs-by-height", {
+    height,
+    ...params.toDict(),
+  }, requestOpts);
+}
+
+/**
+ * Get transactions sent by an address.
+ *
+ * Args:
+ *   address: Hex address of the sender (40 characters)
+ *   opts: Request options including optional pageParams
+ *
+ * Returns:
+ *   Dict with transactions list and pagination info
+ *
+ * Throws:
+ *   ValueError: If address format is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function txsBySender(
+  address: string,
+  opts: RequestOptions & { pageParams?: PageParams } = {},
+): Promise<Record<string, any>> {
+  if (typeof address !== "string" || ![40, 42].includes(address.length)) {
+    throw new Error(`Invalid address format: ${address}`);
+  }
+
+  let normalizedAddr = address;
+  if (normalizedAddr.startsWith("0x") || normalizedAddr.startsWith("0X")) {
+    normalizedAddr = normalizedAddr.slice(2);
+  }
+  normalizedAddr = normalizedAddr.toLowerCase();
+
+  const { pageParams, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("txsBySender", "/v1/query/txs-by-sender", {
+    address: normalizedAddr,
+    ...params.toDict(),
+  }, requestOpts);
+}
+
+/**
+ * Get transactions received by an address.
+ *
+ * Args:
+ *   address: Hex address of the recipient (40 characters)
+ *   opts: Request options including optional pageParams
+ *
+ * Returns:
+ *   Dict with transactions list and pagination info
+ *
+ * Throws:
+ *   ValueError: If address format is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function txsByRecipient(
+  address: string,
+  opts: RequestOptions & { pageParams?: PageParams } = {},
+): Promise<Record<string, any>> {
+  if (typeof address !== "string" || ![40, 42].includes(address.length)) {
+    throw new Error(`Invalid address format: ${address}`);
+  }
+
+  let normalizedAddr = address;
+  if (normalizedAddr.startsWith("0x") || normalizedAddr.startsWith("0X")) {
+    normalizedAddr = normalizedAddr.slice(2);
+  }
+  normalizedAddr = normalizedAddr.toLowerCase();
+
+  const { pageParams, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("txsByRecipient", "/v1/query/txs-by-rec", {
+    address: normalizedAddr,
+    ...params.toDict(),
+  }, requestOpts);
+}
