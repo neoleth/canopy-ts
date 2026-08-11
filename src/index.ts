@@ -4,7 +4,6 @@
  * Subpath imports (recommended — smaller bundles, only pulls in what you use):
  *   import { ... } from "@canopynetwork/canopy-ts/crypto"          — signing, encoding, wallets
  *   import { ... } from "@canopynetwork/canopy-ts/rpc"             — node RPC helpers
- *   import { ... } from "@canopynetwork/canopy-ts/ws"              — WebSocket transport
  *   import { ... } from "@canopynetwork/canopy-ts/errors"          — error classes
  *   import { ... } from "@canopynetwork/canopy-ts/keystore"        — Go-keystore import/export
  *   import { ... } from "@canopynetwork/canopy-ts/wallet-manager"  — WalletManager (multi-account)
@@ -12,14 +11,13 @@
  *   import { ... } from "@canopynetwork/canopy-ts/transaction"     — transaction builders
  *
  * Or import everything from the root for convenience — costs more bundle size
- * since it pulls in every subpath's dependencies (protobufjs, zod, noble-curves,
- * the WS transport) even if you only need one of them:
+ * since it pulls in every subpath's dependencies (protobufjs, zod, noble-curves)
+ * even if you only need one of them:
  *   import { ... } from "@canopynetwork/canopy-ts"
  */
 
 export * from "./crypto.js";
 export * from "./rpc.js";
-export * from "./ws.js";
 export * from "./errors.js";
 export { WalletManager } from "./wallet-manager.js";
 export type { WalletAccount } from "./types.js";
