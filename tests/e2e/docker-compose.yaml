@@ -12,8 +12,8 @@ services:
       context: ${CANOPY_SRC_PATH:-../../../canopy/main}
       dockerfile: ../../canopy-ts/tests/e2e/canopy-node.Dockerfile
     ports:
-      - "${E2E_RPC_PORT:-51002}:50002" # RPC
-      - "${E2E_ADMIN_PORT:-51003}:50003" # Admin RPC
+      - "${E2E_RPC_PORT:-51004}:50002" # RPC
+      - "${E2E_ADMIN_PORT:-51005}:50003" # Admin RPC
     command: ["start"]
     volumes:
       - ./devnet:/root/.canopy

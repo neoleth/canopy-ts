@@ -13,7 +13,7 @@ import { createAndSignTransaction } from '../../transaction.js';
 import { derivePublicKey } from '../../signing.js';
 import { deriveAddress } from '../../address.js';
 import { CurveType } from '../../types.js';
-import { queryHeight, queryAccount, rpcRequest, waitFor, getE2eConfig } from '../../../tests/e2e/helpers.js';
+import { queryHeight, queryAccount, rpcRequest, waitFor, getE2eConfig, extractTxHash } from '../../../tests/e2e/helpers.js';
 import { submitTx } from '../../rpc.js';
 import { generateKeyPair } from '../../wallet.js';
 import { encryptKeyEntry, decryptEntry } from '../../keystore.js';
@@ -74,7 +74,7 @@ describe('E2E Smoke Tests', () => {
 
     // Get current height and fees
     const heightResult = await queryHeight(config);
-    const fees = await rpcRequest<{ sendFee?: number }>('/v1/query/fees', { height: 0 }, config);
+    const fees = await rpcRequest<{ sendFee?: number }>('/v1/query/fee-params', { height: 0 }, config);
     const fee = fees.sendFee ?? 0;
 
     // Create and sign the send transaction
@@ -99,9 +99,9 @@ describe('E2E Smoke Tests', () => {
 
     // Submit the transaction
     const response = await submitTx(tx, { baseUrl: config.rpcUrl });
-    const txHash = response.txHash || response.hash;
+    const txHash = extractTxHash(response);
     expect(typeof txHash).toBe('string');
-    expect((txHash as string).length).toBe(64);
+    expect(txHash.length).toBe(64);
 
     // Wait for the transaction to be applied
     let foundIncrease = false;

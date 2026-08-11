@@ -1,6 +1,5 @@
 import protobuf from "protobufjs";
-import { hexToBytes } from "@noble/hashes/utils.js";
-import { bytesToBase64 } from "./base64.js";
+import { hexToBytes, bytesToHex } from "@noble/hashes/utils.js";
 
 function shouldOmit(value: any): boolean {
   if (value === undefined || value === null) return true;
@@ -9,6 +8,27 @@ function shouldOmit(value: any): boolean {
   if (typeof value === "number" && value === 0) return true;
   if (typeof value === "boolean" && !value) return true;
   return Array.isArray(value) && value.length === 0;
+}
+
+/**
+ * Strips proto3 default-valued fields (0, false, "", empty bytes/array) before
+ * passing to protobuf.Type#create(). Unlike Go's google.golang.org/protobuf
+ * marshaler — which always omits default scalar values on the wire — protobufjs
+ * happily encodes an explicitly-set `false`/`0` field (e.g. `{delegate: false}`)
+ * as an explicit zero byte. Since the node recomputes sign bytes by re-marshaling
+ * the message it reconstructs from our JSON `msg` field, any field we encode
+ * that Go would have omitted (or vice versa) produces different sign bytes and
+ * the node rejects the tx with "invalid signature" — even though the JS-side
+ * signature is internally self-consistent. Empirically confirmed against a live
+ * devnet: `stake`'s `delegate`/`compound` bools failed until this normalization
+ * was added; every encode() below must run its create() payload through this.
+ */
+function proto3Fields<T extends Record<string, any>>(fields: T): Partial<T> {
+  const out: Partial<T> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (!shouldOmit(value)) (out as any)[key] = value;
+  }
+  return out;
 }
 
 const root = protobuf.Root.fromJSON({
@@ -143,6 +163,26 @@ const root = protobuf.Root.fromJSON({
             order_id: { type: "bytes", id: 4 },
           },
         },
+        MessageChangeParameter: {
+          fields: {
+            parameter_space: { type: "string", id: 1 },
+            parameter_key: { type: "string", id: 2 },
+            parameter_value: { type: "google.protobuf.Any", id: 3 },
+            start_height: { type: "uint64", id: 4 },
+            end_height: { type: "uint64", id: 5 },
+            signer: { type: "bytes", id: 6 },
+          },
+        },
+        StringWrapper: {
+          fields: {
+            value: { type: "string", id: 1 },
+          },
+        },
+        UInt64Wrapper: {
+          fields: {
+            value: { type: "uint64", id: 1 },
+          },
+        },
       },
     },
     google: {
@@ -177,6 +217,24 @@ const MsgDeleteOrder = root.lookupType("types.MessageDeleteOrder");
 const MsgDexLimitOrder = root.lookupType("types.MessageDexLimitOrder");
 const MsgDexLiquidityDeposit = root.lookupType("types.MessageDexLiquidityDeposit");
 const MsgDexLiquidityWithdraw = root.lookupType("types.MessageDexLiquidityWithdraw");
+const MsgChangeParameter = root.lookupType("types.MessageChangeParameter");
+const StringWrapper = root.lookupType("types.StringWrapper");
+const UInt64Wrapper = root.lookupType("types.UInt64Wrapper");
+
+/** Packs a change-parameter value into the Any-wrapped StringWrapper/UInt64Wrapper the
+ * node expects, matching canopy-mcp's MessageChangeParameter.pack_value(). */
+function packParameterValue(value: string | number): { type_url: string; value: Uint8Array } {
+  if (typeof value === "string") {
+    return {
+      type_url: "type.googleapis.com/types.StringWrapper",
+      value: StringWrapper.encode(StringWrapper.create({ value })).finish(),
+    };
+  }
+  return {
+    type_url: "type.googleapis.com/types.UInt64Wrapper",
+    value: UInt64Wrapper.encode(UInt64Wrapper.create({ value })).finish(),
+  };
+}
 
 // Message type registry: tx type -> { typeName, encoder, protojson encoder }
 const MESSAGE_REGISTRY: Record<
@@ -186,7 +244,12 @@ const MESSAGE_REGISTRY: Record<
     encode: (msg: any) => Uint8Array;
     /**
      * Registered core types only (send, stake, ...): converts wire-form msg params
-     * to the node's protojson `msg` shape (base64 bytes fields, camelCase names).
+     * to the node's protojson `msg` shape. Byte fields are hex strings (Go's custom
+     * HexBytes JSON marshaling), not standard protojson base64 — verified against
+     * canopy-mcp's e2e-tested Python client (clients/canopy_transactions.py) and,
+     * for `send`, empirically against a live devnet node. Several types also have
+     * deliberately non-camelCase wire keys (documented per entry below) — don't
+     * "fix" those without re-checking against canopy-mcp's client first.
      * Plugin types don't set this — they submit via msgTypeUrl/msgBytes instead.
      */
     toProtojson?: (msg: any) => Record<string, unknown>;
@@ -196,15 +259,15 @@ const MESSAGE_REGISTRY: Record<
     typeName: "types.MessageSend",
     encode: (msg) =>
       MsgSend.encode(
-        MsgSend.create({
+        MsgSend.create(proto3Fields({
           from_address: hexToBytes(msg.fromAddress),
           to_address: hexToBytes(msg.toAddress),
           amount: msg.amount,
-        })
+        }))
       ).finish(),
     toProtojson: (msg) => ({
-      fromAddress: bytesToBase64(hexToBytes(msg.fromAddress)),
-      toAddress: bytesToBase64(hexToBytes(msg.toAddress)),
+      fromAddress: bytesToHex(hexToBytes(msg.fromAddress)),
+      toAddress: bytesToHex(hexToBytes(msg.toAddress)),
       amount: msg.amount,
     }),
   },
@@ -212,43 +275,45 @@ const MESSAGE_REGISTRY: Record<
     typeName: "types.MessageUnstake",
     encode: (msg) =>
       MsgUnstake.encode(
-        MsgUnstake.create({
+        MsgUnstake.create(proto3Fields({
           from_address: hexToBytes(msg.fromAddress),
-        })
+        }))
       ).finish(),
+    // Wire key is "address", not "fromAddress" — verified against canopy-mcp's
+    // _build_unstake_tx (the proto field name doesn't determine the wire key).
     toProtojson: (msg) => ({
-      fromAddress: bytesToBase64(hexToBytes(msg.fromAddress)),
+      address: bytesToHex(hexToBytes(msg.fromAddress)),
     }),
   },
   pause: {
     typeName: "types.MessagePause",
     encode: (msg) =>
       MsgPause.encode(
-        MsgPause.create({
+        MsgPause.create(proto3Fields({
           address: hexToBytes(msg.address),
-        })
+        }))
       ).finish(),
     toProtojson: (msg) => ({
-      address: bytesToBase64(hexToBytes(msg.address)),
+      address: bytesToHex(hexToBytes(msg.address)),
     }),
   },
   unpause: {
     typeName: "types.MessageUnpause",
     encode: (msg) =>
       MsgUnpause.encode(
-        MsgUnpause.create({
+        MsgUnpause.create(proto3Fields({
           address: hexToBytes(msg.address),
-        })
+        }))
       ).finish(),
     toProtojson: (msg) => ({
-      address: bytesToBase64(hexToBytes(msg.address)),
+      address: bytesToHex(hexToBytes(msg.address)),
     }),
   },
   stake: {
     typeName: "types.MessageStake",
     encode: (msg) =>
       MsgStake.encode(
-        MsgStake.create({
+        MsgStake.create(proto3Fields({
           public_key: hexToBytes(msg.publicKey),
           amount: msg.amount,
           committees: msg.committees || [],
@@ -256,14 +321,18 @@ const MESSAGE_REGISTRY: Record<
           output_address: hexToBytes(msg.outputAddress || ""),
           delegate: msg.delegate || false,
           compound: msg.compound || false,
-        })
+        }))
       ).finish(),
+    // Wire key is lowercase "publickey", not "publicKey" — the node's Go
+    // struct JSON tag for this field is deliberately non-camelCase. Verified
+    // against canopy-mcp's e2e-tested client AND empirically (a real devnet
+    // node rejects "publicKey" the same way it rejected base64 bytes fields).
     toProtojson: (msg) => ({
-      publicKey: bytesToBase64(hexToBytes(msg.publicKey)),
+      publickey: bytesToHex(hexToBytes(msg.publicKey)),
       amount: msg.amount,
       committees: msg.committees || [],
       netAddress: msg.netAddress || "",
-      outputAddress: msg.outputAddress ? bytesToBase64(hexToBytes(msg.outputAddress)) : "",
+      outputAddress: msg.outputAddress ? bytesToHex(hexToBytes(msg.outputAddress)) : "",
       delegate: msg.delegate || false,
       compound: msg.compound || false,
     }),
@@ -272,21 +341,21 @@ const MESSAGE_REGISTRY: Record<
     typeName: "types.MessageEditStake",
     encode: (msg) =>
       MsgEditStake.encode(
-        MsgEditStake.create({
+        MsgEditStake.create(proto3Fields({
           address: hexToBytes(msg.address),
           amount: msg.amount,
           committees: msg.committees || [],
           net_address: msg.netAddress || "",
           output_address: hexToBytes(msg.outputAddress || ""),
           compound: msg.compound || false,
-        })
+        }))
       ).finish(),
     toProtojson: (msg) => ({
-      address: bytesToBase64(hexToBytes(msg.address)),
+      address: bytesToHex(hexToBytes(msg.address)),
       amount: msg.amount,
       committees: msg.committees || [],
       netAddress: msg.netAddress || "",
-      outputAddress: msg.outputAddress ? bytesToBase64(hexToBytes(msg.outputAddress)) : "",
+      outputAddress: msg.outputAddress ? bytesToHex(hexToBytes(msg.outputAddress)) : "",
       compound: msg.compound || false,
     }),
   },
@@ -294,33 +363,34 @@ const MESSAGE_REGISTRY: Record<
     typeName: "types.MessageSubsidy",
     encode: (msg) =>
       MsgSubsidy.encode(
-        MsgSubsidy.create({
+        MsgSubsidy.create(proto3Fields({
           address: hexToBytes(msg.address),
           chain_id: msg.chainId,
           amount: msg.amount,
           opcode: hexToBytes(msg.opcode || "00"),
-        })
+        }))
       ).finish(),
+    // Wire key is "chainID" (capital ID), not "chainId".
     toProtojson: (msg) => ({
-      address: bytesToBase64(hexToBytes(msg.address)),
-      chainId: msg.chainId,
+      address: bytesToHex(hexToBytes(msg.address)),
+      chainID: msg.chainId,
       amount: msg.amount,
-      opcode: bytesToBase64(hexToBytes(msg.opcode || "00")),
+      opcode: bytesToHex(hexToBytes(msg.opcode || "00")),
     }),
   },
   daoTransfer: {
     typeName: "types.MessageDAOTransfer",
     encode: (msg) =>
       MsgDAOTransfer.encode(
-        MsgDAOTransfer.create({
+        MsgDAOTransfer.create(proto3Fields({
           address: hexToBytes(msg.address),
           amount: msg.amount,
           start_height: msg.startHeight,
           end_height: msg.endHeight,
-        })
+        }))
       ).finish(),
     toProtojson: (msg) => ({
-      address: bytesToBase64(hexToBytes(msg.address)),
+      address: bytesToHex(hexToBytes(msg.address)),
       amount: msg.amount,
       startHeight: msg.startHeight,
       endHeight: msg.endHeight,
@@ -330,112 +400,144 @@ const MESSAGE_REGISTRY: Record<
     typeName: "types.MessageCreateOrder",
     encode: (msg) =>
       MsgCreateOrder.encode(
-        MsgCreateOrder.create({
+        MsgCreateOrder.create(proto3Fields({
           chain_id: msg.chainId,
           data: hexToBytes(msg.data || ""),
           amount_for_sale: msg.amountForSale,
           requested_amount: msg.requestedAmount,
           seller_receive_address: hexToBytes(msg.sellerReceiveAddress || ""),
           sellers_send_address: hexToBytes(msg.sellersSendAddress),
-        })
+        }))
       ).finish(),
+    // "chainId" (lowercase d) is correct here — intentionally different from
+    // editOrder/deleteOrder's "chainID" below. Verified against canopy-mcp.
     toProtojson: (msg) => ({
       chainId: msg.chainId,
-      data: msg.data ? bytesToBase64(hexToBytes(msg.data)) : "",
+      data: msg.data ? bytesToHex(hexToBytes(msg.data)) : "",
       amountForSale: msg.amountForSale,
       requestedAmount: msg.requestedAmount,
-      sellerReceiveAddress: msg.sellerReceiveAddress ? bytesToBase64(hexToBytes(msg.sellerReceiveAddress)) : "",
-      sellersSendAddress: bytesToBase64(hexToBytes(msg.sellersSendAddress)),
+      sellerReceiveAddress: msg.sellerReceiveAddress ? bytesToHex(hexToBytes(msg.sellerReceiveAddress)) : "",
+      sellersSendAddress: bytesToHex(hexToBytes(msg.sellersSendAddress)),
     }),
   },
   editOrder: {
     typeName: "types.MessageEditOrder",
     encode: (msg) =>
       MsgEditOrder.encode(
-        MsgEditOrder.create({
+        MsgEditOrder.create(proto3Fields({
           order_id: hexToBytes(msg.orderId),
           chain_id: msg.chainId,
           data: hexToBytes(msg.data || ""),
           amount_for_sale: msg.amountForSale,
           requested_amount: msg.requestedAmount,
           seller_receive_address: hexToBytes(msg.sellerReceiveAddress || ""),
-        })
+        }))
       ).finish(),
+    // Wire keys are "orderID"/"chainID" (capital ID) here — contrast with
+    // createOrder's "chainId" above.
     toProtojson: (msg) => ({
-      orderId: bytesToBase64(hexToBytes(msg.orderId)),
-      chainId: msg.chainId,
-      data: msg.data ? bytesToBase64(hexToBytes(msg.data)) : "",
+      orderID: bytesToHex(hexToBytes(msg.orderId)),
+      chainID: msg.chainId,
+      data: msg.data ? bytesToHex(hexToBytes(msg.data)) : "",
       amountForSale: msg.amountForSale,
       requestedAmount: msg.requestedAmount,
-      sellerReceiveAddress: msg.sellerReceiveAddress ? bytesToBase64(hexToBytes(msg.sellerReceiveAddress)) : "",
+      sellerReceiveAddress: msg.sellerReceiveAddress ? bytesToHex(hexToBytes(msg.sellerReceiveAddress)) : "",
     }),
   },
   deleteOrder: {
     typeName: "types.MessageDeleteOrder",
     encode: (msg) =>
       MsgDeleteOrder.encode(
-        MsgDeleteOrder.create({
+        MsgDeleteOrder.create(proto3Fields({
           order_id: hexToBytes(msg.orderId),
           chain_id: msg.chainId,
-        })
+        }))
       ).finish(),
     toProtojson: (msg) => ({
-      orderId: bytesToBase64(hexToBytes(msg.orderId)),
-      chainId: msg.chainId,
+      orderID: bytesToHex(hexToBytes(msg.orderId)),
+      chainID: msg.chainId,
     }),
   },
   dexLimitOrder: {
     typeName: "types.MessageDexLimitOrder",
     encode: (msg) =>
       MsgDexLimitOrder.encode(
-        MsgDexLimitOrder.create({
+        MsgDexLimitOrder.create(proto3Fields({
           chain_id: msg.chainId,
           amount_for_sale: msg.amountForSale,
           requested_amount: msg.requestedAmount,
           address: hexToBytes(msg.address),
-        })
+        }))
       ).finish(),
+    // Deliberate wire-compat rename: the proto field is named "address" but
+    // the wire JSON key is "sellerReceiveAddress" — per canopy-mcp's
+    // MessageDexLimitOrder docstring, do not "fix" this to "address".
     toProtojson: (msg) => ({
-      chainId: msg.chainId,
+      chainID: msg.chainId,
       amountForSale: msg.amountForSale,
       requestedAmount: msg.requestedAmount,
-      address: bytesToBase64(hexToBytes(msg.address)),
+      sellerReceiveAddress: bytesToHex(hexToBytes(msg.address)),
     }),
   },
   dexLiquidityDeposit: {
     typeName: "types.MessageDexLiquidityDeposit",
     encode: (msg) =>
       MsgDexLiquidityDeposit.encode(
-        MsgDexLiquidityDeposit.create({
+        MsgDexLiquidityDeposit.create(proto3Fields({
           chain_id: msg.chainId,
           amount: msg.amount,
           address: hexToBytes(msg.address),
           order_id: hexToBytes(msg.orderId || ""),
-        })
+        }))
       ).finish(),
     toProtojson: (msg) => ({
-      chainId: msg.chainId,
+      chainID: msg.chainId,
       amount: msg.amount,
-      address: bytesToBase64(hexToBytes(msg.address)),
-      orderId: msg.orderId ? bytesToBase64(hexToBytes(msg.orderId)) : "",
+      address: bytesToHex(hexToBytes(msg.address)),
+      orderId: msg.orderId ? bytesToHex(hexToBytes(msg.orderId)) : "",
     }),
   },
   dexLiquidityWithdraw: {
     typeName: "types.MessageDexLiquidityWithdraw",
     encode: (msg) =>
       MsgDexLiquidityWithdraw.encode(
-        MsgDexLiquidityWithdraw.create({
+        MsgDexLiquidityWithdraw.create(proto3Fields({
           chain_id: msg.chainId,
           percent: msg.percent,
           address: hexToBytes(msg.address),
           order_id: hexToBytes(msg.orderId || ""),
-        })
+        }))
       ).finish(),
     toProtojson: (msg) => ({
-      chainId: msg.chainId,
+      chainID: msg.chainId,
       percent: msg.percent,
-      address: bytesToBase64(hexToBytes(msg.address)),
-      orderId: msg.orderId ? bytesToBase64(hexToBytes(msg.orderId)) : "",
+      address: bytesToHex(hexToBytes(msg.address)),
+      orderId: msg.orderId ? bytesToHex(hexToBytes(msg.orderId)) : "",
+    }),
+  },
+  changeParameter: {
+    typeName: "types.MessageChangeParameter",
+    encode: (msg) =>
+      MsgChangeParameter.encode(
+        MsgChangeParameter.create(proto3Fields({
+          parameter_space: msg.parameterSpace,
+          parameter_key: msg.parameterKey,
+          parameter_value: packParameterValue(msg.parameterValue),
+          start_height: msg.startHeight,
+          end_height: msg.endHeight,
+          signer: hexToBytes(msg.signer),
+        }))
+      ).finish(),
+    // Go's custom MarshalJSON unwraps the Any back to the raw scalar — mirror that
+    // here rather than emitting a nested {typeUrl, value} object. proposalHash is
+    // intentionally omitted (server-managed, must stay empty).
+    toProtojson: (msg) => ({
+      parameterSpace: msg.parameterSpace,
+      parameterKey: msg.parameterKey,
+      parameterValue: msg.parameterValue,
+      startHeight: msg.startHeight,
+      endHeight: msg.endHeight,
+      signer: bytesToHex(hexToBytes(msg.signer)),
     }),
   },
 };
@@ -540,8 +642,9 @@ export function encodeMessage(
 
 /**
  * Convert wire-form msg params to the node's protojson `msg` shape for a registered
- * core type (base64 bytes fields, camelCase names). Used for the `msg`-form tx output
- * that the node's registered-core-type submission path requires — see TASKS.md.
+ * core type (HEX bytes fields — Go's custom HexBytes JSON marshaling, not base64 —
+ * plus per-type wire-key quirks, see comments above). Used for the `msg`-form tx
+ * output that the node's registered-core-type submission path requires — see TASKS.md.
  */
 export function toProtojsonMsg(txType: string, msg: any): Record<string, unknown> {
   const entry = MESSAGE_REGISTRY[txType];

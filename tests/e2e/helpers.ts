@@ -11,11 +11,18 @@
 /**
  * Extract transaction hash from a submitTx RPC response.
  *
- * The RPC endpoint returns a response with a txHash or hash field.
- * This helper extracts it, raising an error if not found.
+ * Empirically confirmed against a live devnet: /v1/tx's success response body
+ * is a bare JSON-encoded hex string (the tx hash itself), not an object —
+ * despite submitTx()'s Record<string, unknown> return type. Some node
+ * versions/paths may still wrap it in {txHash} or {hash}, so this handles
+ * both shapes.
  */
-export function extractTxHash(response: Record<string, unknown>): string {
-  const hash = response.txHash || response.hash;
+export function extractTxHash(response: unknown): string {
+  if (typeof response === 'string' && response.length > 0) {
+    return response;
+  }
+  const obj = response as Record<string, unknown>;
+  const hash = obj?.txHash || obj?.hash;
   if (!hash || typeof hash !== 'string') {
     throw new Error(`No transaction hash in response: ${JSON.stringify(response)}`);
   }
@@ -85,8 +92,8 @@ export interface E2eConfig {
  * local testing where you're running the container manually).
  */
 export function getE2eConfig(): E2eConfig {
-  const rpcPort = parseInt(process.env.E2E_RPC_PORT || '51002');
-  const adminPort = parseInt(process.env.E2E_ADMIN_PORT || '51003');
+  const rpcPort = parseInt(process.env.E2E_RPC_PORT || '51004');
+  const adminPort = parseInt(process.env.E2E_ADMIN_PORT || '51005');
 
   return {
     rpcUrl: process.env.E2E_RPC_URL || `http://localhost:${rpcPort}`,

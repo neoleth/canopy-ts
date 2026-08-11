@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createAndSignTransaction } from "../transaction.js";
 import { derivePublicKey } from "../signing.js";
 import { CurveType } from "../types.js";
-import { bytesToBase64 } from "../base64.js";
-import { hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 
 // Fixed BLS12381 private key (well within the scalar field's valid range) so signing
 // is deterministic — generateKeyPair() draws random bytes and can occasionally produce
@@ -14,8 +13,11 @@ const PUBLIC_KEY_HEX = derivePublicKey(PRIVATE_KEY_HEX, CurveType.BLS12381);
 
 // The node's lib.Transaction.UnmarshalJSON only honors msgTypeUrl/msgBytes for
 // plugin-defined message types. For registered core types (send, stake, ...) it
-// requires the protojson `msg` field instead: base64-encoded bytes fields,
-// camelCase names. See TASKS.md.
+// requires the protojson `msg` field instead: HEX-encoded bytes fields (the
+// node's custom HexBytes JSON marshaling, not standard base64 protojson), with
+// per-type wire-key quirks documented in MESSAGE_REGISTRY. Verified both against
+// canopy-mcp's e2e-tested Python client and empirically against a live devnet
+// node (see docs/superpowers/plans/2026-08-11-fix-transaction-wire-format.md).
 describe("createAndSignTransaction core format", () => {
   it("emits a protojson msg field instead of msgTypeUrl/msgBytes for a registered core type", () => {
     const fromAddress = "aa".repeat(20);
@@ -37,8 +39,8 @@ describe("createAndSignTransaction core format", () => {
     ) as any;
 
     expect(tx.msg).toEqual({
-      fromAddress: bytesToBase64(hexToBytes(fromAddress)),
-      toAddress: bytesToBase64(hexToBytes(toAddress)),
+      fromAddress: bytesToHex(hexToBytes(fromAddress)),
+      toAddress: bytesToHex(hexToBytes(toAddress)),
       amount: 100,
     });
     expect(tx).not.toHaveProperty("msgTypeUrl");

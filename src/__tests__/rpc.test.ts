@@ -35,12 +35,13 @@ describe("fetchHeight", () => {
 });
 
 describe("submitTx", () => {
-  it("POSTs the serialized tx to /v1/tx", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }));
+  it("POSTs the serialized tx to /v1/tx and returns the parsed JSON response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(json({ txHash: "aabbcc" }));
     vi.stubGlobal("fetch", fetchMock);
-    await submitTx({ a: 1 }, { retry: false });
+    const result = await submitTx({ a: 1 }, { retry: false });
     expect(fetchMock.mock.calls[0][0]).toBe("/v1/tx");
     expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({ a: 1 }));
+    expect(result).toEqual({ txHash: "aabbcc" });
   });
 
   it("throws RpcError carrying the server body on failure", async () => {

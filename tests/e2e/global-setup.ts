@@ -20,8 +20,8 @@ const E2E_DIR = path.dirname(__filename);
 const DEVNET_DIR = path.join(E2E_DIR, 'devnet');
 const COMPOSE_FILE = path.join(E2E_DIR, 'docker-compose.yaml');
 
-const RPC_PORT = parseInt(process.env.E2E_RPC_PORT || '51002');
-const ADMIN_PORT = parseInt(process.env.E2E_ADMIN_PORT || '51003');
+const RPC_PORT = parseInt(process.env.E2E_RPC_PORT || '51004');
+const ADMIN_PORT = parseInt(process.env.E2E_ADMIN_PORT || '51005');
 const RPC_URL = `http://localhost:${RPC_PORT}`;
 const ADMIN_RPC_URL = `http://localhost:${ADMIN_PORT}`;
 

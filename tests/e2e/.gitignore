@@ -1,0 +1,8 @@
+# Docker-container-generated devnet runtime state (fresh each `npm run test:e2e` run
+# via global-setup.ts's wipe step). Only the checked-in fixtures — config.json,
+# genesis.json, validator_key.json — are meant to be tracked.
+devnet/canopy/
+devnet/logs/
+devnet/book.json
+devnet/polls.json
+devnet/proposals.json
