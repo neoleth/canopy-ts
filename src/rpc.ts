@@ -177,14 +177,17 @@ export async function fetchHeight(opts: RequestOptions = {}): Promise<number> {
 /**
  * Submit a signed transaction to the Canopy public RPC.
  * Calls POST /v1/tx (default port 50002).
+ *
+ * Returns the response body containing the transaction hash and other metadata.
  */
-export async function submitTx(tx: object, opts: RequestOptions = {}): Promise<void> {
-  await request(
+export async function submitTx(tx: object, opts: RequestOptions = {}): Promise<Record<string, unknown>> {
+  const res = await request(
     "submitTx",
     "/v1/tx",
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(tx) },
     opts,
   );
+  return res.json();
 }
 
 // --- Query methods ----------------------------------------------------------
