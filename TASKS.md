@@ -109,3 +109,14 @@ plans' scope while making these suites pass:
 2. A staked validator is queried by an address derived from its own BLS
    operator public key — not by `outputAddress` (where rewards land) or by
    the funder's signing address.
+
+## Keystore management parity with canopy-mcp (RESOLVED)
+
+WalletManager now covers canopy-mcp's keystore_* surface except
+keystore_mint_batch (a devnet-funding test convenience tied to admin RPC,
+deliberately not ported — doesn't fit a general client SDK). Added this
+session: deleteAccount (keystore_delete), exportEncryptedEntry
+(keystore_export_encrypted), listAccounts (keystore_list, full metadata
+not just addresses). Pre-existing: createWallet (keystore_new), importEntry
+/loadKeystoreJson (keystore_import), unlock/unlockAccount (keystore_get),
+getAccount (keystore_view, roughly).
