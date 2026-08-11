@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { validator, validators, PageParams } from "../rpc.js";
+import { validator, validators } from "../rpc.js";
 
 function json(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -7,6 +7,12 @@ function json(body: unknown, init?: ResponseInit): Response {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
+}
+
+async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
+  const items: T[] = [];
+  for await (const item of iter) items.push(item);
+  return items;
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -60,15 +66,13 @@ describe("Task 8: validator, validators", () => {
   });
 
   describe("validators()", () => {
-    it("queries validators list with default pagination at latest height", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(
-        json({ results: [], pageNumber: 1 })
-      );
+    it("iterates the validators list with default pagination at latest height", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ results: [{ address: validAddr40 }] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await validators({ retry: false });
+      const result = await collect(validators({ retry: false }));
 
-      expect(result.results).toBeDefined();
+      expect(result).toEqual([{ address: validAddr40 }]);
       expect(fetchMock.mock.calls[0][0]).toContain("/v1/query/validators");
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(1);
@@ -79,8 +83,7 @@ describe("Task 8: validator, validators", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const pageParams = new PageParams({ page: 2, per_page: 50 });
-      await validators({ pageParams, retry: false });
+      await collect(validators({ pageParams: { page: 2, per_page: 50 }, retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(2);
@@ -91,7 +94,7 @@ describe("Task 8: validator, validators", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      await validators({ height: 150, retry: false });
+      await collect(validators({ height: 150, retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.height).toBe(150);
@@ -101,8 +104,11 @@ describe("Task 8: validator, validators", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const pageParams = new PageParams({ page: 3, per_page: 100, order_by: "stake", desc: true });
-      await validators({ pageParams, height: 200, retry: false });
+      await collect(validators({
+        pageParams: { page: 3, per_page: 100, order_by: "stake", desc: true },
+        height: 200,
+        retry: false,
+      }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(3);
@@ -110,6 +116,20 @@ describe("Task 8: validator, validators", () => {
       expect(body.orderBy).toBe("stake");
       expect(body.desc).toBe(true);
       expect(body.height).toBe(200);
+    });
+
+    it("advances pages until a short page ends iteration", async () => {
+      const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string);
+        if (body.pageNumber === 1) return json({ results: [{ address: "a1" }, { address: "a2" }] });
+        return json({ results: [{ address: "a3" }] });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await collect(validators({ pageParams: { per_page: 2 }, retry: false }));
+
+      expect(result).toEqual([{ address: "a1" }, { address: "a2" }, { address: "a3" }]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 });

@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-11
+
+### Breaking Changes
+
+- **Paginated RPC query functions are now async generators, not
+  Promise-returning single-page calls.** `failedTxs`, `txsByHeight`,
+  `txsBySender`, `txsByRecipient`, `pending`, `eventsByAddress`,
+  `eventsByChain`, `eventsByHeight`, `validators`, `committee`, and `orders`
+  each now iterate the *entire* result set across pages automatically —
+  `for await (const item of validators())` — instead of returning one page's
+  raw `{ results, pageNumber, ... }` dict. This is the idiomatic async-iterable
+  pagination pattern (research: `software-engineering/typescript-sdk-design`),
+  replacing the previous manual `PageParams`-per-call design outright rather
+  than adding it alongside as an opt-in helper.
+- `paginate()` (added in 0.7.0 as a wrapper around the old single-page API) is
+  removed — each function now does this natively, so the wrapper is no
+  longer needed.
+- The `pageParams` option on these 11 functions now takes a plain
+  `PageParamsOptions` object (`{ page, per_page, order_by, desc }`) instead
+  of a `PageParams` class instance — simpler, and matches how every other
+  options bag in this SDK works. `PageParams` itself is unchanged and still
+  exported for anyone constructing one directly.
+- Unaffected: `accountsBatch`, `validator`, `pool`, `nextDexBatch`, and every
+  non-paginated query — still return a single `Promise`, as before.
+
 ## [0.7.0] - 2026-08-11
 
 ### Added

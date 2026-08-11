@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { eventsByAddress, eventsByChain, eventsByHeight, PageParams } from "../rpc.js";
+import { eventsByAddress, eventsByChain, eventsByHeight } from "../rpc.js";
 
 function json(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -9,21 +9,25 @@ function json(body: unknown, init?: ResponseInit): Response {
   });
 }
 
+async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
+  const items: T[] = [];
+  for await (const item of iter) items.push(item);
+  return items;
+}
+
 afterEach(() => vi.restoreAllMocks());
 
 describe("Task 7: eventsByAddress, eventsByChain, eventsByHeight", () => {
   const validAddr40 = "a".repeat(40);
 
   describe("eventsByAddress()", () => {
-    it("queries events for an address with default pagination", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(
-        json({ results: [], pageNumber: 1 })
-      );
+    it("iterates events for an address with default pagination", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ results: [{ id: "e1" }] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await eventsByAddress(validAddr40, { retry: false });
+      const result = await collect(eventsByAddress(validAddr40, { retry: false }));
 
-      expect(result.results).toBeDefined();
+      expect(result).toEqual([{ id: "e1" }]);
       expect(fetchMock.mock.calls[0][0]).toContain("/v1/query/events-by-address");
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.address).toBe(validAddr40);
@@ -34,7 +38,7 @@ describe("Task 7: eventsByAddress, eventsByChain, eventsByHeight", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      await eventsByAddress(addr, { retry: false });
+      await collect(eventsByAddress(addr, { retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.address).toBe("a".repeat(40));
@@ -44,8 +48,7 @@ describe("Task 7: eventsByAddress, eventsByChain, eventsByHeight", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const pageParams = new PageParams({ page: 2, per_page: 50 });
-      await eventsByAddress(validAddr40, { pageParams, retry: false });
+      await collect(eventsByAddress(validAddr40, { pageParams: { page: 2, per_page: 50 }, retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(2);
@@ -55,20 +58,18 @@ describe("Task 7: eventsByAddress, eventsByChain, eventsByHeight", () => {
     it("throws on invalid address", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ results: [] })));
 
-      expect(eventsByAddress("invalid", { retry: false })).rejects.toThrow();
+      await expect(collect(eventsByAddress("invalid", { retry: false }))).rejects.toThrow();
     });
   });
 
   describe("eventsByChain()", () => {
-    it("queries events for a chain/committee ID with default pagination", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(
-        json({ results: [], pageNumber: 1 })
-      );
+    it("iterates events for a chain/committee ID with default pagination", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ results: [{ id: "e1" }] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await eventsByChain(1, { retry: false });
+      const result = await collect(eventsByChain(1, { retry: false }));
 
-      expect(result.results).toBeDefined();
+      expect(result).toEqual([{ id: "e1" }]);
       expect(fetchMock.mock.calls[0][0]).toContain("/v1/query/events-by-chain");
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.id).toBe(1);
@@ -78,8 +79,7 @@ describe("Task 7: eventsByAddress, eventsByChain, eventsByHeight", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const pageParams = new PageParams({ page: 3, per_page: 100 });
-      await eventsByChain(1, { pageParams, retry: false });
+      await collect(eventsByChain(1, { pageParams: { page: 3, per_page: 100 }, retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(3);
@@ -89,21 +89,19 @@ describe("Task 7: eventsByAddress, eventsByChain, eventsByHeight", () => {
     it("throws on invalid chain ID", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ results: [] })));
 
-      expect(eventsByChain(-1, { retry: false })).rejects.toThrow();
-      expect(eventsByChain("invalid" as any, { retry: false })).rejects.toThrow();
+      await expect(collect(eventsByChain(-1, { retry: false }))).rejects.toThrow();
+      await expect(collect(eventsByChain("invalid" as any, { retry: false }))).rejects.toThrow();
     });
   });
 
   describe("eventsByHeight()", () => {
-    it("queries events at a specific block height", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(
-        json({ results: [], pageNumber: 1 })
-      );
+    it("iterates events at a specific block height", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ results: [{ id: "e1" }] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await eventsByHeight(42, { retry: false });
+      const result = await collect(eventsByHeight(42, { retry: false }));
 
-      expect(result.results).toBeDefined();
+      expect(result).toEqual([{ id: "e1" }]);
       expect(fetchMock.mock.calls[0][0]).toContain("/v1/query/events-by-height");
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.height).toBe(42);
@@ -113,7 +111,7 @@ describe("Task 7: eventsByAddress, eventsByChain, eventsByHeight", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      await eventsByHeight(0, { retry: false });
+      await collect(eventsByHeight(0, { retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.height).toBe(0);
@@ -123,13 +121,26 @@ describe("Task 7: eventsByAddress, eventsByChain, eventsByHeight", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const pageParams = new PageParams({ page: 2, per_page: 50, desc: false });
-      await eventsByHeight(100, { pageParams, retry: false });
+      await collect(eventsByHeight(100, { pageParams: { page: 2, per_page: 50, desc: false }, retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(2);
       expect(body.perPage).toBe(50);
       expect(body.desc).toBe(false);
+    });
+
+    it("advances pages until a short page ends iteration", async () => {
+      const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string);
+        if (body.pageNumber === 1) return json({ results: [{ id: "e1" }, { id: "e2" }] });
+        return json({ results: [{ id: "e3" }] });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await collect(eventsByHeight(100, { pageParams: { per_page: 2 }, retry: false }));
+
+      expect(result).toEqual([{ id: "e1" }, { id: "e2" }, { id: "e3" }]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 });

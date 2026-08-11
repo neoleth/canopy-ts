@@ -91,43 +91,30 @@ export function PageSchema<T>(itemSchema: z.ZodType<T>): z.ZodType<{ results: T[
 }
 
 /**
- * Turn any of this module's paginated query functions into an async
- * iterable that yields individual items, automatically advancing through
- * pages — hides the page/per_page cursor plumbing behind a plain
- * `for await...of` loop instead of manual page-by-page calls.
- *
- * Works with any paginated function here (`validators`, `committee`,
- * `txsByHeight`, `eventsByAddress`, ...) — since each takes its own
- * positional args before `opts`, wrap it in a closure that only exposes the
- * `opts` parameter this helper drives:
- *
- * ```ts
- * for await (const v of paginate(opts => validators(opts))) {
- *   console.log(v);
- * }
- *
- * for await (const e of paginate(opts => eventsByAddress(address, opts), { pageParams: { per_page: 50 } })) {
- *   console.log(e);
- * }
- * ```
+ * Drives one of this module's paginated query endpoints as an async
+ * generator, advancing pages automatically — every paginated query
+ * function below (`validators`, `committee`, `txsByHeight`,
+ * `eventsByAddress`, ...) is a thin `yield*` wrapper around this, so
+ * consumers get a plain `for await...of` over items instead of manual
+ * page-by-page calls with page/per_page cursor plumbing.
  *
  * Stops when a page returns fewer than `per_page` results — the standard
  * last-page signal for offset/page pagination — or an empty/missing
  * `results` array. Does not itself validate the response shape; malformed
  * responses (missing/non-array `results`) are treated as an empty final
- * page rather than thrown, since the underlying query functions don't
+ * page rather than thrown, since `fetchPage` (via `postQuery`) doesn't
  * currently validate pagination responses against {@link PageSchema} either.
  */
-export async function* paginate<T = unknown>(
-  fetchPage: (opts: RequestOptions & { pageParams?: PageParams }) => Promise<Record<string, any>>,
-  init: { pageParams?: PageParamsOptions; requestOptions?: RequestOptions } = {},
+async function* paginateQuery<T>(
+  fetchPage: (params: PageParams) => Promise<Record<string, any>>,
+  pageParams?: PageParamsOptions,
 ): AsyncGenerator<T, void, undefined> {
-  const perPage = init.pageParams?.per_page ?? 20;
-  let page = init.pageParams?.page ?? 1;
+  const perPage = pageParams?.per_page ?? 20;
+  let page = pageParams?.page ?? 1;
 
   for (;;) {
-    const pageParams = new PageParams({ ...init.pageParams, page, per_page: perPage });
-    const response = await fetchPage({ ...init.requestOptions, pageParams });
+    const params = new PageParams({ ...pageParams, page, per_page: perPage });
+    const response = await fetchPage(params);
     const results: T[] = Array.isArray(response?.results) ? response.results : [];
 
     for (const item of results) yield item;
@@ -365,21 +352,21 @@ export async function txByHash(
  * does not include failed transactions in blocks - this only reflects
  * transactions that failed locally.
  *
+ * Iterates every failed transaction for an address, advancing pages
+ * automatically.
+ *
  * Args:
  *   address: Hex address of the sender (40 characters)
- *   opts: Request options including optional pageParams
- *
- * Returns:
- *   Dict with failed-txs list, error details, and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc)
  *
  * Throws:
  *   ValueError: If address format is invalid
  *   RpcError: On HTTP errors or network failures
  */
-export async function failedTxs(
+export async function* failedTxs(
   address: string,
-  opts: RequestOptions & { pageParams?: PageParams } = {},
-): Promise<Record<string, any>> {
+  opts: RequestOptions & { pageParams?: PageParamsOptions } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   if (typeof address !== "string" || ![40, 42].includes(address.length)) {
     throw new Error(`Invalid address format: ${address}`);
   }
@@ -391,58 +378,56 @@ export async function failedTxs(
   normalizedAddr = normalizedAddr.toLowerCase();
 
   const { pageParams, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("failedTxs", "/v1/query/failed-txs", {
-    address: normalizedAddr,
-    ...params.toDict(),
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("failedTxs", "/v1/query/failed-txs", {
+      address: normalizedAddr,
+      ...params.toDict(),
+    }, requestOpts),
+    pageParams,
+  );
 }
 
 /**
- * Get transactions at a specific block height.
+ * Iterates every transaction at a specific block height, advancing pages
+ * automatically.
  *
  * Args:
  *   height: Block height (0 = latest committed height)
- *   opts: Request options including optional pageParams
- *
- * Returns:
- *   Dict with transactions list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc)
  *
  * Throws:
  *   RpcError: On HTTP errors or network failures
  */
-export async function txsByHeight(
+export async function* txsByHeight(
   height: number = 0,
-  opts: RequestOptions & { pageParams?: PageParams } = {},
-): Promise<Record<string, any>> {
+  opts: RequestOptions & { pageParams?: PageParamsOptions } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   const { pageParams, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("txsByHeight", "/v1/query/txs-by-height", {
-    height,
-    ...params.toDict(),
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("txsByHeight", "/v1/query/txs-by-height", {
+      height,
+      ...params.toDict(),
+    }, requestOpts),
+    pageParams,
+  );
 }
 
 /**
- * Get transactions sent by an address.
+ * Iterates every transaction sent by an address, advancing pages
+ * automatically.
  *
  * Args:
  *   address: Hex address of the sender (40 characters)
- *   opts: Request options including optional pageParams
- *
- * Returns:
- *   Dict with transactions list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc)
  *
  * Throws:
  *   ValueError: If address format is invalid
  *   RpcError: On HTTP errors or network failures
  */
-export async function txsBySender(
+export async function* txsBySender(
   address: string,
-  opts: RequestOptions & { pageParams?: PageParams } = {},
-): Promise<Record<string, any>> {
+  opts: RequestOptions & { pageParams?: PageParamsOptions } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   if (typeof address !== "string" || ![40, 42].includes(address.length)) {
     throw new Error(`Invalid address format: ${address}`);
   }
@@ -454,32 +439,31 @@ export async function txsBySender(
   normalizedAddr = normalizedAddr.toLowerCase();
 
   const { pageParams, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("txsBySender", "/v1/query/txs-by-sender", {
-    address: normalizedAddr,
-    ...params.toDict(),
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("txsBySender", "/v1/query/txs-by-sender", {
+      address: normalizedAddr,
+      ...params.toDict(),
+    }, requestOpts),
+    pageParams,
+  );
 }
 
 /**
- * Get transactions received by an address.
+ * Iterates every transaction received by an address, advancing pages
+ * automatically.
  *
  * Args:
  *   address: Hex address of the recipient (40 characters)
- *   opts: Request options including optional pageParams
- *
- * Returns:
- *   Dict with transactions list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc)
  *
  * Throws:
  *   ValueError: If address format is invalid
  *   RpcError: On HTTP errors or network failures
  */
-export async function txsByRecipient(
+export async function* txsByRecipient(
   address: string,
-  opts: RequestOptions & { pageParams?: PageParams } = {},
-): Promise<Record<string, any>> {
+  opts: RequestOptions & { pageParams?: PageParamsOptions } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   if (typeof address !== "string" || ![40, 42].includes(address.length)) {
     throw new Error(`Invalid address format: ${address}`);
   }
@@ -491,33 +475,33 @@ export async function txsByRecipient(
   normalizedAddr = normalizedAddr.toLowerCase();
 
   const { pageParams, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("txsByRecipient", "/v1/query/txs-by-rec", {
-    address: normalizedAddr,
-    ...params.toDict(),
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("txsByRecipient", "/v1/query/txs-by-rec", {
+      address: normalizedAddr,
+      ...params.toDict(),
+    }, requestOpts),
+    pageParams,
+  );
 }
 
 /**
- * Get unconfirmed mempool transactions.
+ * Iterates every unconfirmed mempool transaction, advancing pages
+ * automatically.
  *
  * Args:
- *   opts: Request options including optional pageParams
- *
- * Returns:
- *   Dict with pending transactions list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc)
  *
  * Throws:
  *   RpcError: On HTTP errors or network failures
  */
-export async function pending(
-  opts: RequestOptions & { pageParams?: PageParams } = {},
-): Promise<Record<string, any>> {
+export async function* pending(
+  opts: RequestOptions & { pageParams?: PageParamsOptions } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   const { pageParams, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("pending", "/v1/query/pending", params.toDict(), requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("pending", "/v1/query/pending", params.toDict(), requestOpts),
+    pageParams,
+  );
 }
 
 /**
@@ -654,23 +638,20 @@ export async function subsidizedCommittees(
 }
 
 /**
- * Get events for an address.
+ * Iterates every event for an address, advancing pages automatically.
  *
  * Args:
  *   address: Hex address (40 characters)
- *   opts: Request options including optional pageParams
- *
- * Returns:
- *   Dict with events list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc)
  *
  * Throws:
  *   ValueError: If address format is invalid
  *   RpcError: On HTTP errors or network failures
  */
-export async function eventsByAddress(
+export async function* eventsByAddress(
   address: string,
-  opts: RequestOptions & { pageParams?: PageParams } = {},
-): Promise<Record<string, any>> {
+  opts: RequestOptions & { pageParams?: PageParamsOptions } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   if (typeof address !== "string" || ![40, 42].includes(address.length)) {
     throw new Error(`Invalid address format: ${address}`);
   }
@@ -682,69 +663,68 @@ export async function eventsByAddress(
   normalizedAddr = normalizedAddr.toLowerCase();
 
   const { pageParams, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("eventsByAddress", "/v1/query/events-by-address", {
-    address: normalizedAddr,
-    ...params.toDict(),
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("eventsByAddress", "/v1/query/events-by-address", {
+      address: normalizedAddr,
+      ...params.toDict(),
+    }, requestOpts),
+    pageParams,
+  );
 }
 
 /**
- * Get events for a chain/committee ID.
+ * Iterates every event for a chain/committee ID, advancing pages
+ * automatically.
  *
  * Args:
  *   chainId: Chain/committee ID
- *   opts: Request options including optional pageParams
- *
- * Returns:
- *   Dict with events list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc)
  *
  * Throws:
  *   ValueError: If chain_id is invalid
  *   RpcError: On HTTP errors or network failures
  */
-export async function eventsByChain(
+export async function* eventsByChain(
   chainId: number,
-  opts: RequestOptions & { pageParams?: PageParams } = {},
-): Promise<Record<string, any>> {
+  opts: RequestOptions & { pageParams?: PageParamsOptions } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   if (typeof chainId !== "number" || chainId < 0) {
     throw new Error(`Invalid chain ID: ${chainId}`);
   }
 
   const { pageParams, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("eventsByChain", "/v1/query/events-by-chain", {
-    id: chainId,
-    ...params.toDict(),
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("eventsByChain", "/v1/query/events-by-chain", {
+      id: chainId,
+      ...params.toDict(),
+    }, requestOpts),
+    pageParams,
+  );
 }
 
 /**
- * Get events at a specific block height.
+ * Iterates every event at a specific block height, advancing pages
+ * automatically.
  *
  * Args:
  *   height: Block height (0 = latest committed height)
- *   opts: Request options including optional pageParams
- *
- * Returns:
- *   Dict with events list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc)
  *
  * Throws:
  *   RpcError: On HTTP errors or network failures
  */
-export async function eventsByHeight(
+export async function* eventsByHeight(
   height: number = 0,
-  opts: RequestOptions & { pageParams?: PageParams } = {},
-): Promise<Record<string, any>> {
+  opts: RequestOptions & { pageParams?: PageParamsOptions } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   const { pageParams, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("eventsByHeight", "/v1/query/events-by-height", {
-    height,
-    ...params.toDict(),
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("eventsByHeight", "/v1/query/events-by-height", {
+      height,
+      ...params.toDict(),
+    }, requestOpts),
+    pageParams,
+  );
 }
 
 /**
@@ -784,27 +764,25 @@ export async function validator(
 }
 
 /**
- * Get list of validators with pagination.
+ * Iterates every validator, advancing pages automatically.
  *
  * Args:
- *   opts: Request options including optional pageParams and height
- *
- * Returns:
- *   Dict with validators list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc) and height
  *
  * Throws:
  *   RpcError: On HTTP errors or network failures
  */
-export async function validators(
-  opts: RequestOptions & { pageParams?: PageParams; height?: number } = {},
-): Promise<Record<string, any>> {
+export async function* validators(
+  opts: RequestOptions & { pageParams?: PageParamsOptions; height?: number } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   const { pageParams, height = 0, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("validators", "/v1/query/validators", {
-    ...params.toDict(),
-    height,
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("validators", "/v1/query/validators", {
+      ...params.toDict(),
+      height,
+    }, requestOpts),
+    pageParams,
+  );
 }
 
 /**
@@ -874,35 +852,33 @@ export async function fees(
 }
 
 /**
- * Get committee members.
+ * Iterates every committee member, advancing pages automatically.
  *
  * Args:
  *   committeeId: Committee/chain ID
- *   opts: Request options including optional pageParams and height
- *
- * Returns:
- *   Dict with committee members list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc) and height
  *
  * Throws:
  *   ValueError: If committee_id is invalid
  *   RpcError: On HTTP errors or network failures
  */
-export async function committee(
+export async function* committee(
   committeeId: number,
-  opts: RequestOptions & { pageParams?: PageParams; height?: number } = {},
-): Promise<Record<string, any>> {
+  opts: RequestOptions & { pageParams?: PageParamsOptions; height?: number } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   if (typeof committeeId !== "number" || committeeId < 0) {
     throw new Error(`Invalid committee ID: ${committeeId}`);
   }
 
   const { pageParams, height = 0, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("committee", "/v1/query/committee", {
-    ...params.toDict(),
-    committeeID: committeeId,
-    height,
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("committee", "/v1/query/committee", {
+      ...params.toDict(),
+      committeeID: committeeId,
+      height,
+    }, requestOpts),
+    pageParams,
+  );
 }
 
 // Pool addends matching Go: uint64(N * math.MaxUint16 / 4)
@@ -1002,7 +978,8 @@ export async function nextDexBatch(
 }
 
 /**
- * List open DEX sell orders for a committee.
+ * Iterates every open DEX sell order for a committee, advancing pages
+ * automatically.
  *
  * Each result's "id" is the order's hex order ID -- the same value
  * edit_order()/delete_order() expect for their order_id argument.
@@ -1010,24 +987,22 @@ export async function nextDexBatch(
  * Args:
  *   committeeId: The committee id the orders belong to (same id passed as
  *                `committee_id` to create_order/edit_order/delete_order)
- *   opts: Request options including optional pageParams and height
- *
- * Returns:
- *   Dict with orders list and pagination info
+ *   opts: Request options plus optional pageParams (page/per_page/order_by/desc) and height
  *
  * Throws:
  *   RpcError: On HTTP errors or network failures
  */
-export async function orders(
+export async function* orders(
   committeeId: number,
-  opts: RequestOptions & { pageParams?: PageParams; height?: number } = {},
-): Promise<Record<string, any>> {
+  opts: RequestOptions & { pageParams?: PageParamsOptions; height?: number } = {},
+): AsyncGenerator<Record<string, any>, void, undefined> {
   const { pageParams, height = 0, ...requestOpts } = opts;
-  const params = pageParams || new PageParams();
-
-  return postQuery("orders", "/v1/query/orders", {
-    ...params.toDict(),
-    committee: committeeId,
-    height,
-  }, requestOpts);
+  yield* paginateQuery(
+    (params) => postQuery("orders", "/v1/query/orders", {
+      ...params.toDict(),
+      committee: committeeId,
+      height,
+    }, requestOpts),
+    pageParams,
+  );
 }

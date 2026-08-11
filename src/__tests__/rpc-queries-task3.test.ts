@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { txByHash, failedTxs, PageParams } from "../rpc.js";
+import { txByHash, failedTxs } from "../rpc.js";
 
 function json(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -7,6 +7,12 @@ function json(body: unknown, init?: ResponseInit): Response {
     headers: { "Content-Type": "application/json" },
     ...init,
   });
+}
+
+async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
+  const items: T[] = [];
+  for await (const item of iter) items.push(item);
+  return items;
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -31,27 +37,27 @@ describe("Task 3: txByHash, failedTxs", () => {
     it("throws on invalid hash length", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ hash: "invalid" })));
 
-      expect(txByHash("abc", { retry: false })).rejects.toThrow();
-      expect(txByHash("b".repeat(63), { retry: false })).rejects.toThrow();
+      await expect(txByHash("abc", { retry: false })).rejects.toThrow();
+      await expect(txByHash("b".repeat(63), { retry: false })).rejects.toThrow();
     });
 
     it("throws on non-string hash", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({})));
 
-      expect(txByHash(123 as any, { retry: false })).rejects.toThrow();
+      await expect(txByHash(123 as any, { retry: false })).rejects.toThrow();
     });
   });
 
   describe("failedTxs()", () => {
-    it("queries failed txs for an address at page 1", async () => {
+    it("iterates failed txs for an address, starting at page 1", async () => {
       const fetchMock = vi.fn().mockResolvedValue(
-        json({ failedTxs: [], pageNumber: 1, perPage: 20 })
+        json({ results: [{ hash: "h1" }] })
       );
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await failedTxs(validAddr40, { retry: false });
+      const result = await collect(failedTxs(validAddr40, { retry: false }));
 
-      expect(result.failedTxs).toBeDefined();
+      expect(result).toEqual([{ hash: "h1" }]);
       expect(fetchMock.mock.calls[0][0]).toContain("/v1/query/failed-txs");
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.address).toBe(validAddr40);
@@ -60,22 +66,25 @@ describe("Task 3: txByHash, failedTxs", () => {
 
     it("normalizes address to lowercase without 0x prefix", async () => {
       const addr = "0x" + "A".repeat(40);
-      const fetchMock = vi.fn().mockResolvedValue(json({ failedTxs: [] }));
+      const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      await failedTxs(addr, { retry: false });
+      await collect(failedTxs(addr, { retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.address).toBe("a".repeat(40));
     });
 
-    it("uses custom page params", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(json({ failedTxs: [] }));
+    it("uses custom page params and stops advancing once a short page is seen", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const pageParams = new PageParams({ page: 3, per_page: 50, order_by: "height", desc: false });
-      await failedTxs(validAddr40, { pageParams, retry: false });
+      await collect(failedTxs(validAddr40, {
+        pageParams: { page: 3, per_page: 50, order_by: "height", desc: false },
+        retry: false,
+      }));
 
+      expect(fetchMock).toHaveBeenCalledTimes(1);
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(3);
       expect(body.perPage).toBe(50);
@@ -84,10 +93,24 @@ describe("Task 3: txByHash, failedTxs", () => {
     });
 
     it("throws on invalid address", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ failedTxs: [] })));
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ results: [] })));
 
-      expect(failedTxs("invalid", { retry: false })).rejects.toThrow();
-      expect(failedTxs("0xinvalid", { retry: false })).rejects.toThrow();
+      await expect(collect(failedTxs("invalid", { retry: false }))).rejects.toThrow();
+      await expect(collect(failedTxs("0xinvalid", { retry: false }))).rejects.toThrow();
+    });
+
+    it("advances pages until a short page ends iteration", async () => {
+      const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string);
+        if (body.pageNumber === 1) return json({ results: [{ hash: "a" }, { hash: "b" }] });
+        return json({ results: [{ hash: "c" }] }); // shorter than per_page=2 -> last page
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await collect(failedTxs(validAddr40, { pageParams: { per_page: 2 }, retry: false }));
+
+      expect(result).toEqual([{ hash: "a" }, { hash: "b" }, { hash: "c" }]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 });

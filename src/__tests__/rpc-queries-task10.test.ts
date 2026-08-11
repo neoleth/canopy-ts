@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { committee, pool, PageParams } from "../rpc.js";
+import { committee, pool } from "../rpc.js";
 
 function json(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -9,19 +9,23 @@ function json(body: unknown, init?: ResponseInit): Response {
   });
 }
 
+async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
+  const items: T[] = [];
+  for await (const item of iter) items.push(item);
+  return items;
+}
+
 afterEach(() => vi.restoreAllMocks());
 
 describe("Task 10: committee, pool", () => {
   describe("committee()", () => {
-    it("queries committee members by committee ID with default pagination", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(
-        json({ results: [], pageNumber: 1 })
-      );
+    it("iterates committee members by committee ID with default pagination", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ results: [{ address: "a1" }] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await committee(1, { retry: false });
+      const result = await collect(committee(1, { retry: false }));
 
-      expect(result.results).toBeDefined();
+      expect(result).toEqual([{ address: "a1" }]);
       expect(fetchMock.mock.calls[0][0]).toContain("/v1/query/committee");
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.committeeID).toBe(1);
@@ -33,8 +37,7 @@ describe("Task 10: committee, pool", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const pageParams = new PageParams({ page: 2, per_page: 50 });
-      await committee(1, { pageParams, retry: false });
+      await collect(committee(1, { pageParams: { page: 2, per_page: 50 }, retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(2);
@@ -45,7 +48,7 @@ describe("Task 10: committee, pool", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      await committee(1, { height: 100, retry: false });
+      await collect(committee(1, { height: 100, retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.height).toBe(100);
@@ -54,8 +57,22 @@ describe("Task 10: committee, pool", () => {
     it("throws on invalid committee ID", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ results: [] })));
 
-      expect(committee(-1, { retry: false })).rejects.toThrow();
-      expect(committee("invalid" as any, { retry: false })).rejects.toThrow();
+      await expect(collect(committee(-1, { retry: false }))).rejects.toThrow();
+      await expect(collect(committee("invalid" as any, { retry: false }))).rejects.toThrow();
+    });
+
+    it("advances pages until a short page ends iteration", async () => {
+      const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(init.body as string);
+        if (body.pageNumber === 1) return json({ results: [{ address: "a1" }, { address: "a2" }] });
+        return json({ results: [{ address: "a3" }] });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await collect(committee(1, { pageParams: { per_page: 2 }, retry: false }));
+
+      expect(result).toEqual([{ address: "a1" }, { address: "a2" }, { address: "a3" }]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
   });
 

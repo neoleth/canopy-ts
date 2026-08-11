@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { pending, accountsBatch, PageParams } from "../rpc.js";
+import { pending, accountsBatch } from "../rpc.js";
 
 function json(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -9,19 +9,25 @@ function json(body: unknown, init?: ResponseInit): Response {
   });
 }
 
+async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
+  const items: T[] = [];
+  for await (const item of iter) items.push(item);
+  return items;
+}
+
 afterEach(() => vi.restoreAllMocks());
 
 describe("Task 5: pending, accountsBatch", () => {
   const validAddr40 = "a".repeat(40);
 
   describe("pending()", () => {
-    it("queries unconfirmed mempool transactions with default pagination", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(json({ results: [], pageNumber: 1 }));
+    it("iterates unconfirmed mempool transactions with default pagination", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(json({ results: [{ hash: "h1" }] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await pending({ retry: false });
+      const result = await collect(pending({ retry: false }));
 
-      expect(result.results).toBeDefined();
+      expect(result).toEqual([{ hash: "h1" }]);
       expect(fetchMock.mock.calls[0][0]).toContain("/v1/query/pending");
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(1);
@@ -32,8 +38,7 @@ describe("Task 5: pending, accountsBatch", () => {
       const fetchMock = vi.fn().mockResolvedValue(json({ results: [] }));
       vi.stubGlobal("fetch", fetchMock);
 
-      const pageParams = new PageParams({ page: 2, per_page: 50 });
-      await pending({ pageParams, retry: false });
+      await collect(pending({ pageParams: { page: 2, per_page: 50 }, retry: false }));
 
       const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
       expect(body.pageNumber).toBe(2);
