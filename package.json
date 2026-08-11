@@ -53,7 +53,8 @@
     "postbuild": "node scripts/copy-ws-protos.cjs",
     "dev": "tsc --watch",
     "prepare": "tsc && npm run postbuild",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "vitest run --config vitest.config.e2e.ts"
   },
   "dependencies": {
     "@noble/curves": "^2.0.1",
