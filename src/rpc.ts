@@ -5,6 +5,56 @@ import { request, RequestOptions } from "./http.js";
 
 export type { RequestOptions, RetryConfig } from "./http.js";
 
+// --- PageParams for paginated endpoints ------------------------------------
+
+export interface PageParamsOptions {
+  page?: number;
+  per_page?: number;
+  order_by?: string;
+  desc?: boolean;
+}
+
+/**
+ * Pagination parameters for list endpoints.
+ *
+ * Attributes:
+ *   page - Page number (1-indexed, default: 1)
+ *   per_page - Results per page (default: 20, max: 100)
+ *   order_by - Sort field name
+ *   desc - Sort descending (default: true)
+ */
+export class PageParams {
+  page: number;
+  per_page: number;
+  order_by?: string;
+  desc: boolean;
+
+  constructor(opts?: PageParamsOptions) {
+    this.page = opts?.page ?? 1;
+    this.per_page = opts?.per_page ?? 20;
+    this.order_by = opts?.order_by;
+    this.desc = opts?.desc ?? true;
+  }
+
+  /**
+   * Convert to API request parameters.
+   *
+   * Returns:
+   *   Dict with pageNumber, perPage, orderBy (if set), desc
+   */
+  toDict(): Record<string, any> {
+    const params: Record<string, any> = {
+      pageNumber: this.page,
+      perPage: this.per_page,
+      desc: this.desc,
+    };
+    if (this.order_by) {
+      params.orderBy = this.order_by;
+    }
+    return params;
+  }
+}
+
 // --- Response schemas -------------------------------------------------------
 
 const GoKeystoreEntrySchema = z.object({
@@ -23,6 +73,21 @@ const KeystoreResponseSchema = z.object({
 
 const HeightResponseSchema = z.object({ height: z.number() });
 
+/**
+ * Create a schema for paginated responses.
+ *
+ * Args:
+ *   itemSchema - Schema for individual items in the results array
+ *
+ * Returns:
+ *   Zod schema accepting { results: [...], pageNumber, perPage, desc, total, pages, ... }
+ */
+export function PageSchema<T>(itemSchema: z.ZodType<T>): z.ZodType<{ results: T[]; [key: string]: any }> {
+  return z.object({
+    results: z.array(itemSchema),
+  }).passthrough();
+}
+
 /** Validate a parsed JSON body against a schema, throwing ResponseValidationError on mismatch. */
 function validate<T>(label: string, schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
@@ -33,6 +98,43 @@ function validate<T>(label: string, schema: z.ZodType<T>, value: unknown): T {
     });
   }
   return result.data;
+}
+
+/**
+ * Generic POST query helper for read-only RPC endpoints.
+ *
+ * Args:
+ *   label - Human-readable operation name for error messages
+ *   path - RPC endpoint path (e.g., "/v1/query/account")
+ *   body - Request body object (will be JSON-stringified)
+ *   opts - Request options (baseUrl, retry, timeout, etc.)
+ *   schema - Optional Zod schema for response validation
+ *
+ * Returns:
+ *   Parsed JSON response, optionally validated against schema
+ *
+ * Throws:
+ *   ResponseValidationError if response does not match schema
+ *   RpcError on HTTP errors or network failures
+ */
+export async function postQuery<T = unknown>(
+  label: string,
+  path: string,
+  body: Record<string, any>,
+  opts: RequestOptions = {},
+  schema?: z.ZodType<T>,
+): Promise<T> {
+  const res = await request(
+    label,
+    path,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+    opts,
+  );
+  const data = await res.json();
+  if (schema) {
+    return validate(label, schema, data);
+  }
+  return data as T;
 }
 
 // --- RPC helpers ------------------------------------------------------------
