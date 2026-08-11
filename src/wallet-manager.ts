@@ -149,6 +149,20 @@ export class WalletManager {
   }
 
   /**
+   * List every loaded account's public metadata (address, public key, curve
+   * type, nickname if set). Matches canopy-mcp's keystore_list — unlike
+   * getAccounts(), no secrets, no follow-up getAccount() call needed.
+   */
+  listAccounts(): Array<{ address: string; publicKey: string; curveType: CurveType; nickname?: string }> {
+    return Array.from(this.keystoreData.values()).map((entry) => ({
+      address: entry.address.toLowerCase(),
+      publicKey: entry.publicKey,
+      curveType: entry.curveType,
+      nickname: entry.nickname,
+    }));
+  }
+
+  /**
    * Decrypt and unlock an account's private key
    * @param address - Account address
    * @param password - Wallet password

@@ -152,4 +152,43 @@ describe("WalletManager standalone", () => {
 
     await expect(wm.exportEncryptedEntry(kp.address, "wrong-pw", "export-pw")).rejects.toThrow();
   });
+
+  it("listAccounts returns full public metadata for every loaded account", async () => {
+    const kp = generateKeyPair();
+    const entry = await encryptKeyEntry(
+      { privateKeyHex: kp.privateKeyHex, publicKeyHex: kp.publicKeyHex, address: kp.address, curveType: kp.curveType, nickname: "mine" },
+      "pw",
+    );
+    const storage = fakeStorage();
+    storage.save(entry);
+    vi.mocked(fetchKeystore).mockResolvedValue([]);
+
+    const wm = new WalletManager({ storage });
+    await wm.loadAccounts();
+
+    expect(wm.listAccounts()).toEqual([
+      {
+        address: kp.address.toLowerCase(),
+        publicKey: kp.publicKeyHex,
+        curveType: kp.curveType,
+        nickname: "mine",
+      },
+    ]);
+  });
+
+  it("listAccounts omits nickname when the entry has none", async () => {
+    const kp = generateKeyPair();
+    const entry = await encryptKeyEntry(
+      { privateKeyHex: kp.privateKeyHex, publicKeyHex: kp.publicKeyHex, address: kp.address, curveType: kp.curveType },
+      "pw",
+    );
+    const storage = fakeStorage();
+    storage.save(entry);
+    vi.mocked(fetchKeystore).mockResolvedValue([]);
+
+    const wm = new WalletManager({ storage });
+    await wm.loadAccounts();
+
+    expect(wm.listAccounts()[0].nickname).toBeUndefined();
+  });
 });
