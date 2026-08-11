@@ -820,3 +820,99 @@ export async function fees(
     height,
   }, requestOpts);
 }
+
+/**
+ * Get committee members.
+ *
+ * Args:
+ *   committeeId: Committee/chain ID
+ *   opts: Request options including optional pageParams and height
+ *
+ * Returns:
+ *   Dict with committee members list and pagination info
+ *
+ * Throws:
+ *   ValueError: If committee_id is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function committee(
+  committeeId: number,
+  opts: RequestOptions & { pageParams?: PageParams; height?: number } = {},
+): Promise<Record<string, any>> {
+  if (typeof committeeId !== "number" || committeeId < 0) {
+    throw new Error(`Invalid committee ID: ${committeeId}`);
+  }
+
+  const { pageParams, height = 0, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("committee", "/v1/query/committee", {
+    ...params.toDict(),
+    committeeID: committeeId,
+    height,
+  }, requestOpts);
+}
+
+// Pool addends matching Go: uint64(N * math.MaxUint16 / 4)
+// Note: math.MaxUint16 = 65535 (2^16 - 1), so:
+// subsidy: 0 * 65535 / 4 = 0
+// holding: 1 * 65535 / 4 = 16383
+// liquidity: 2 * 65535 / 4 = 32767
+// escrow: 4 * 65535 / 4 = 65535
+const POOL_ADDENDS: Record<string, number> = {
+  subsidy: 0,
+  holding: Math.floor(1 * 65535 / 4),     // 16383
+  liquidity: Math.floor(2 * 65535 / 4),   // 32767
+  escrow: Math.floor(4 * 65535 / 4),      // 65535
+};
+
+async function queryPool(
+  poolId: number,
+  requestOpts: RequestOptions,
+): Promise<Record<string, any>> {
+  return postQuery("queryPool", "/v1/query/pool", {
+    id: poolId,
+  }, requestOpts);
+}
+
+/**
+ * Query pool balance(s) for a committee/chain.
+ *
+ * Args:
+ *   chainId: The committee/chain ID
+ *   opts: Request options with optional poolType and node targeting
+ *         poolType: 'subsidy' (default), 'holding', 'liquidity', 'escrow', or 'all'
+ *
+ * Returns:
+ *   Single pool dict with pool_id, or nested dict for 'all' poolType
+ *
+ * Throws:
+ *   ValueError: If pool_type is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function pool(
+  chainId: number,
+  opts: RequestOptions & { poolType?: string } = {},
+): Promise<Record<string, any>> {
+  const { poolType = "subsidy", ...requestOpts } = opts;
+
+  if (poolType === "all") {
+    const results: Record<string, any> = {};
+    for (const [name, addend] of Object.entries(POOL_ADDENDS)) {
+      const poolResult = await queryPool(chainId + addend, requestOpts);
+      results[name] = { ...poolResult, pool_id: chainId + addend };
+    }
+    return results;
+  }
+
+  const addend = POOL_ADDENDS[poolType];
+  if (addend === undefined) {
+    throw new Error(
+      `Unknown pool_type '${poolType}'. Valid: ${Object.keys(POOL_ADDENDS).join(", ")}, 'all'`
+    );
+  }
+
+  const result = await queryPool(chainId + addend, requestOpts);
+  result.pool_id = chainId + addend;
+  return result;
+}
