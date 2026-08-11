@@ -1,5 +1,6 @@
 import protobuf from "protobufjs";
 import { hexToBytes } from "@noble/hashes/utils.js";
+import { bytesToBase64 } from "./base64.js";
 
 function shouldOmit(value: any): boolean {
   if (value === undefined || value === null) return true;
@@ -62,10 +63,19 @@ const root = protobuf.Root.fromJSON({
 const Transaction = root.lookupType("types.Transaction");
 const MsgSend = root.lookupType("types.MessageSend");
 
-// Message type registry: tx type -> { typeName, encoder }
+// Message type registry: tx type -> { typeName, encoder, protojson encoder }
 const MESSAGE_REGISTRY: Record<
   string,
-  { typeName: string; encode: (msg: any) => Uint8Array }
+  {
+    typeName: string;
+    encode: (msg: any) => Uint8Array;
+    /**
+     * Registered core types only (send, stake, ...): converts wire-form msg params
+     * to the node's protojson `msg` shape (base64 bytes fields, camelCase names).
+     * Plugin types don't set this — they submit via msgTypeUrl/msgBytes instead.
+     */
+    toProtojson?: (msg: any) => Record<string, unknown>;
+  }
 > = {
   send: {
     typeName: "types.MessageSend",
@@ -77,6 +87,11 @@ const MESSAGE_REGISTRY: Record<
           amount: msg.amount,
         })
       ).finish(),
+    toProtojson: (msg) => ({
+      fromAddress: bytesToBase64(hexToBytes(msg.fromAddress)),
+      toAddress: bytesToBase64(hexToBytes(msg.toAddress)),
+      amount: msg.amount,
+    }),
   },
 };
 
@@ -87,9 +102,10 @@ const MESSAGE_REGISTRY: Record<
 export function registerMessageType(
   txType: string,
   typeName: string,
-  encode: (msg: any) => Uint8Array
+  encode: (msg: any) => Uint8Array,
+  toProtojson?: (msg: any) => Record<string, unknown>
 ) {
-  MESSAGE_REGISTRY[txType] = { typeName, encode };
+  MESSAGE_REGISTRY[txType] = { typeName, encode, toProtojson };
 }
 
 const encoderCache = new Map<string, protobuf.Type>();
@@ -175,4 +191,18 @@ export function encodeMessage(
     typeUrl: `type.googleapis.com/${entry.typeName}`,
     msgBytes: entry.encode(msg),
   };
+}
+
+/**
+ * Convert wire-form msg params to the node's protojson `msg` shape for a registered
+ * core type (base64 bytes fields, camelCase names). Used for the `msg`-form tx output
+ * that the node's registered-core-type submission path requires — see TASKS.md.
+ */
+export function toProtojsonMsg(txType: string, msg: any): Record<string, unknown> {
+  const entry = MESSAGE_REGISTRY[txType];
+  if (!entry) throw new Error(`Unknown message type: ${txType}`);
+  if (!entry.toProtojson) {
+    throw new Error(`Message type '${txType}' has no protojson (core-format) encoder registered`);
+  }
+  return entry.toProtojson(msg);
 }
