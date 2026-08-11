@@ -5,6 +5,67 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-08-11
+
+### Added
+
+- `./keystore`, `./wallet-manager`, `./node-pool`, and `./transaction` package
+  exports — previously only reachable via the root barrel import.
+- `CoreTransaction` and `CreateAndSignTransactionOptions` types exported from
+  `./crypto` and the root (alongside the existing `createAndSignTransaction`
+  and `PluginTransaction`).
+- `sideEffects: false` in `package.json`, so bundlers can tree-shake unused
+  subpaths (protobufjs, zod, noble-curves, the WS transport) out of a root
+  import that only needs one of them.
+- `verbatimModuleSyntax` enabled in `tsconfig.json` for more reliable
+  tree-shaking through type-only imports.
+- README with quick-start examples for keys/wallets, keystore, RPC, WebSocket,
+  and multi-node failover.
+
+### Fixed
+
+- `./proto` package export used the deprecated directory-trailing-slash
+  syntax (`"./dist/proto/"`), which current Node.js no longer documents as
+  supported. Switched to the wildcard-pattern form (`"./dist/proto/*"`).
+- `repository.url` in `package.json` now uses the `git+` prefix form, which
+  npm's trusted-publisher matching expects.
+- CI publish workflow was only half-migrated to trusted publishing (had
+  `id-token: write` but still authenticated with a long-lived `NPM_TOKEN`,
+  and pinned Node 20, below trusted publishing's Node 22.14.0 minimum).
+  Finished the migration: Node 22, `npm install -g npm@latest` to guarantee
+  npm ≥11.5.1, dropped the token-based auth.
+
+## [0.6.0] - 2026-08-11
+
+### Added
+
+- In-browser key generation and Go-keystore-compatible encryption:
+  `generateKeyPair`, `encryptPrivateKey`/`encryptPrivateKeyHex`,
+  `decryptPrivateKey`/`decryptPrivateKeyHex`.
+- `WalletManager` — multi-account wallet with injectable storage:
+  `loadAccounts`, `createWallet`, `unlock`, `deleteAccount`,
+  `exportEncryptedEntry`, `listAccounts`.
+- Full RPC query surface: account, block, transaction (by hash/height/sender/
+  recipient), validator, committee, pool, network state, events, and DEX
+  batch/orders query methods, plus `PageParams`/`PageSchema` for pagination.
+- Core transaction builders (`createAndSignTransaction`, `PluginTransaction`,
+  `CoreTransaction`) covering all registered on-chain message types, with
+  correct hex wire format and per-type wire-key quirks matched against a live
+  devnet.
+- `NodePool` — multi-node RPC client with automatic round-robin failover
+  (`withFailover`), pinned-node mode, and `healthCheckAll` diagnostics.
+- End-to-end test suite (smoke, stake, subsidize, dex-orders, dex-liquidity)
+  running against a live single-node devnet in Docker.
+
+### Fixed
+
+- Signature verification failed for any message type with falsy/zero fields
+  (e.g. `{delegate: false}`) — protobufjs was writing explicit zero bytes
+  where Go's proto3 marshaler omits them. Fixed with a `proto3Fields()`
+  helper applied to every encoder.
+- Validator lookups now key by the validator's own BLS-operator-derived
+  address, not the funder/output address.
+
 ## [0.5.0] - 2026-06-07
 
 ### Breaking Changes

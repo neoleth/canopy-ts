@@ -1,5 +1,6 @@
 import { signMessage } from "./signing.js";
-import { CurveType, TransactionSignature, TransactionParams } from "./types.js";
+import { CurveType } from "./types.js";
+import type { TransactionSignature, TransactionParams } from "./types.js";
 import { getSignBytesProtobuf, encodeMessage, toProtojsonMsg } from "./protobuf.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 

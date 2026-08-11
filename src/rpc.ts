@@ -1,7 +1,9 @@
 import { z } from "zod";
-import { importFromGoKeystore, GoKeystoreEntry, ParsedKeystoreEntry } from "./keystore.js";
+import { importFromGoKeystore } from "./keystore.js";
+import type { GoKeystoreEntry, ParsedKeystoreEntry } from "./keystore.js";
 import { ResponseValidationError } from "./errors.js";
-import { request, RequestOptions } from "./http.js";
+import { request } from "./http.js";
+import type { RequestOptions } from "./http.js";
 
 export type { RequestOptions, RetryConfig } from "./http.js";
 

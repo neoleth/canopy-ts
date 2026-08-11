@@ -8,6 +8,17 @@ function bytesToBigInt(bytes: Uint8Array): bigint {
   return BigInt("0x" + bytesToHex(bytes));
 }
 
+/**
+ * Sign a message with a private key, using the given curve's native
+ * signature format — compact (r,s) for {@link CurveType.SECP256K1}/
+ * {@link CurveType.ETHSECP256K1} (matches Go's SECP256K1 signature format,
+ * no recovery byte), standard Ed25519 for {@link CurveType.ED25519}, and a
+ * BLS12-381 G2 point for {@link CurveType.BLS12381}.
+ *
+ * @returns The signature, hex-encoded.
+ * @throws {Error} if the private key's byte length doesn't match the
+ * curve's expected size, or the curve type is unsupported.
+ */
 export function signMessage(
   messageBytes: Uint8Array,
   privateKeyHex: string,
@@ -70,6 +81,17 @@ function signSECP256K1(
   return bytesToHex(secp256k1.sign(messageBytes, privKeyBytes) as unknown as Uint8Array);
 }
 
+/**
+ * Derive the public key for a private key, in the curve's canonical
+ * on-chain encoding — compressed 33-byte point for
+ * {@link CurveType.SECP256K1}, uncompressed-minus-prefix 64 bytes for
+ * {@link CurveType.ETHSECP256K1} (Ethereum convention), standard Ed25519
+ * public key for {@link CurveType.ED25519}, and a compressed BLS12-381 G1
+ * point for {@link CurveType.BLS12381}.
+ *
+ * @returns The public key, hex-encoded.
+ * @throws {Error} if the curve type is unsupported.
+ */
 export function derivePublicKey(
   privateKeyHex: string,
   curveType: CurveType

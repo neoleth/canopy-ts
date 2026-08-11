@@ -1,6 +1,14 @@
 import { hexToBytes } from "@noble/hashes/utils.js";
 import { CurveType, KEY_SIZES } from "./types.js";
 
+/**
+ * Infer a public key's curve type from its byte length alone. Useful when
+ * a key arrives without an explicit curve tag (e.g. from a Go keystore
+ * import) and the curve has to be recovered before signing/address work.
+ *
+ * @throws {Error} if the byte length doesn't match any known curve's public
+ * key size ({@link KEY_SIZES.PUBLIC}).
+ */
 export function detectPublicKeyCurve(publicKeyHex: string): CurveType {
   const bytes = hexToBytes(publicKeyHex);
 
