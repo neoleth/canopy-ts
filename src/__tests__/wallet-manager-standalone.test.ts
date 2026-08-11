@@ -77,4 +77,35 @@ describe("WalletManager standalone", () => {
     const acct = await wm.createWallet("mine", "secret");
     await expect(wm.unlock(acct.address, "nope")).rejects.toThrow();
   });
+
+  it("deleteAccount removes a single entry from storage and the in-memory cache", async () => {
+    const kp1 = generateKeyPair();
+    const kp2 = generateKeyPair();
+    const entry1 = await encryptKeyEntry(
+      { privateKeyHex: kp1.privateKeyHex, publicKeyHex: kp1.publicKeyHex, address: kp1.address, curveType: kp1.curveType, nickname: "one" },
+      "pw",
+    );
+    const entry2 = await encryptKeyEntry(
+      { privateKeyHex: kp2.privateKeyHex, publicKeyHex: kp2.publicKeyHex, address: kp2.address, curveType: kp2.curveType, nickname: "two" },
+      "pw",
+    );
+    const storage = fakeStorage();
+    storage.save(entry1);
+    storage.save(entry2);
+    vi.mocked(fetchKeystore).mockResolvedValue([]);
+
+    const wm = new WalletManager({ storage });
+    await wm.loadAccounts();
+    expect(wm.getAccounts()).toHaveLength(2);
+
+    wm.deleteAccount(kp1.address);
+
+    expect(wm.getAccounts()).toEqual([kp2.address.toLowerCase()]);
+    expect(storage.load().map((e) => e.address)).toEqual([kp2.address]);
+  });
+
+  it("deleteAccount throws when the address isn't loaded", () => {
+    const wm = new WalletManager({ storage: fakeStorage() });
+    expect(() => wm.deleteAccount("aa".repeat(20))).toThrow(/Account not found/);
+  });
 });

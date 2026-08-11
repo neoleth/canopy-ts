@@ -241,4 +241,19 @@ export class WalletManager {
     this.accounts.clear();
     this.keystoreData.clear();
   }
+
+  /**
+   * Remove a single account from storage and the in-memory cache.
+   * @param address - Account address to delete
+   * @throws if the address isn't currently loaded
+   */
+  deleteAccount(address: string): void {
+    const addr = address.toLowerCase();
+    if (!this.accounts.has(addr)) {
+      throw new Error(`Account not found: ${address}`);
+    }
+    this.storage?.remove(addr);
+    this.accounts.delete(addr);
+    this.keystoreData.delete(addr);
+  }
 }
