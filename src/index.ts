@@ -43,3 +43,7 @@ export type {
 
 // Additional types
 export type { UnlockedAccount, LoadedAccount } from "./types.js";
+
+// Multi-node management
+export { NodePool } from "./node-pool.js";
+export type { NodeEntry } from "./node-pool.js";

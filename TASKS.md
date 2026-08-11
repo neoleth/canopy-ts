@@ -120,3 +120,14 @@ session: deleteAccount (keystore_delete), exportEncryptedEntry
 not just addresses). Pre-existing: createWallet (keystore_new), importEntry
 /loadKeystoreJson (keystore_import), unlock/unlockAccount (keystore_get),
 getAccount (keystore_view, roughly).
+
+## Node config / failover parity with canopy-mcp (RESOLVED)
+
+Added NodePool (src/node-pool.ts) — round-robin automatic failover
+(rotate on connection errors/timeouts/5xx, propagate 4xx immediately),
+pin-to-a-node (selectNode/resetNodes), and a health-check sweep
+(healthCheckAll), matching canopy-mcp's CanopyClient node handling
+(list_nodes/select_node/add_node/reset_nodes/health_check_all). Doesn't
+wrap individual RPC functions — callers pass a thunk:
+`pool.withFailover(opts => fetchHeight(opts))`, so NodePool never needs
+updating when rpc.ts gains new query methods.
