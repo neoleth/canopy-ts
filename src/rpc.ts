@@ -694,3 +694,63 @@ export async function eventsByHeight(
     ...params.toDict(),
   }, requestOpts);
 }
+
+/**
+ * Get validator information.
+ *
+ * Args:
+ *   address: Validator hex address
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   Dict with validator details (stake, status, etc.)
+ *
+ * Throws:
+ *   ValueError: If address format is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function validator(
+  address: string,
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  if (typeof address !== "string" || ![40, 42].includes(address.length)) {
+    throw new Error(`Invalid address format: ${address}`);
+  }
+
+  let normalizedAddr = address;
+  if (normalizedAddr.startsWith("0x") || normalizedAddr.startsWith("0X")) {
+    normalizedAddr = normalizedAddr.slice(2);
+  }
+  normalizedAddr = normalizedAddr.toLowerCase();
+
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("validator", "/v1/query/validator", {
+    address: normalizedAddr,
+    height,
+  }, requestOpts);
+}
+
+/**
+ * Get list of validators with pagination.
+ *
+ * Args:
+ *   opts: Request options including optional pageParams and height
+ *
+ * Returns:
+ *   Dict with validators list and pagination info
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function validators(
+  opts: RequestOptions & { pageParams?: PageParams; height?: number } = {},
+): Promise<Record<string, any>> {
+  const { pageParams, height = 0, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("validators", "/v1/query/validators", {
+    ...params.toDict(),
+    height,
+  }, requestOpts);
+}
