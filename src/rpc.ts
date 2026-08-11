@@ -186,3 +186,95 @@ export async function submitTx(tx: object, opts: RequestOptions = {}): Promise<v
     opts,
   );
 }
+
+// --- Query methods ----------------------------------------------------------
+
+/**
+ * Get account balance and details.
+ *
+ * Args:
+ *   address: Hex address (40 characters, with or without 0x prefix)
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   Dict with address, balance, staked, height, and other account data
+ *
+ * Throws:
+ *   ValueError: If address format is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function account(
+  address: string,
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  if (typeof address !== "string" || ![40, 42].includes(address.length)) {
+    throw new Error(`Invalid address format: ${address}`);
+  }
+
+  let normalizedAddr = address;
+  if (normalizedAddr.startsWith("0x") || normalizedAddr.startsWith("0X")) {
+    normalizedAddr = normalizedAddr.slice(2);
+  }
+  normalizedAddr = normalizedAddr.toLowerCase();
+
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("account", "/v1/query/account", {
+    address: normalizedAddr,
+    height,
+  }, requestOpts);
+}
+
+/**
+ * Get block at specific height.
+ *
+ * Args:
+ *   height: Block height (must be > 0)
+ *   opts: Request options
+ *
+ * Returns:
+ *   Dict with block data, transactions, and metadata
+ *
+ * Throws:
+ *   ValueError: If height is 0 or invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function blockByHeight(
+  height: number,
+  opts: RequestOptions = {},
+): Promise<Record<string, any>> {
+  if (typeof height !== "number" || height <= 0) {
+    throw new Error("Height must be greater than 0");
+  }
+
+  return postQuery("blockByHeight", "/v1/query/block-by-height", {
+    height,
+  }, opts);
+}
+
+/**
+ * Get block by hash.
+ *
+ * Args:
+ *   blockHash: Block hash (64 character hex)
+ *   opts: Request options
+ *
+ * Returns:
+ *   Dict with block data
+ *
+ * Throws:
+ *   ValueError: If hash format is invalid
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function blockByHash(
+  blockHash: string,
+  opts: RequestOptions = {},
+): Promise<Record<string, any>> {
+  if (typeof blockHash !== "string" || blockHash.length !== 64) {
+    throw new Error(`Invalid block hash format: ${blockHash}`);
+  }
+
+  return postQuery("blockByHash", "/v1/query/block-by-hash", {
+    hash: blockHash,
+  }, opts);
+}

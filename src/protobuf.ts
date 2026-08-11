@@ -41,6 +41,108 @@ const root = protobuf.Root.fromJSON({
             amount: { type: "uint64", id: 3 },
           },
         },
+        MessageUnstake: {
+          fields: {
+            from_address: { type: "bytes", id: 1 },
+          },
+        },
+        MessagePause: {
+          fields: {
+            address: { type: "bytes", id: 1 },
+          },
+        },
+        MessageUnpause: {
+          fields: {
+            address: { type: "bytes", id: 1 },
+          },
+        },
+        MessageStake: {
+          fields: {
+            public_key: { type: "bytes", id: 1 },
+            amount: { type: "uint64", id: 2 },
+            committees: { type: "uint64", id: 3, rule: "repeated" },
+            net_address: { type: "string", id: 4 },
+            output_address: { type: "bytes", id: 5 },
+            delegate: { type: "bool", id: 6 },
+            compound: { type: "bool", id: 7 },
+          },
+        },
+        MessageEditStake: {
+          fields: {
+            address: { type: "bytes", id: 1 },
+            amount: { type: "uint64", id: 2 },
+            committees: { type: "uint64", id: 3, rule: "repeated" },
+            net_address: { type: "string", id: 4 },
+            output_address: { type: "bytes", id: 5 },
+            compound: { type: "bool", id: 6 },
+          },
+        },
+        MessageSubsidy: {
+          fields: {
+            address: { type: "bytes", id: 1 },
+            chain_id: { type: "uint64", id: 2 },
+            amount: { type: "uint64", id: 3 },
+            opcode: { type: "bytes", id: 4 },
+          },
+        },
+        MessageDAOTransfer: {
+          fields: {
+            address: { type: "bytes", id: 1 },
+            amount: { type: "uint64", id: 2 },
+            start_height: { type: "uint64", id: 4 },
+            end_height: { type: "uint64", id: 5 },
+          },
+        },
+        MessageCreateOrder: {
+          fields: {
+            chain_id: { type: "uint64", id: 1 },
+            data: { type: "bytes", id: 2 },
+            amount_for_sale: { type: "uint64", id: 3 },
+            requested_amount: { type: "uint64", id: 4 },
+            seller_receive_address: { type: "bytes", id: 5 },
+            sellers_send_address: { type: "bytes", id: 6 },
+          },
+        },
+        MessageEditOrder: {
+          fields: {
+            order_id: { type: "bytes", id: 1 },
+            chain_id: { type: "uint64", id: 2 },
+            data: { type: "bytes", id: 3 },
+            amount_for_sale: { type: "uint64", id: 4 },
+            requested_amount: { type: "uint64", id: 5 },
+            seller_receive_address: { type: "bytes", id: 6 },
+          },
+        },
+        MessageDeleteOrder: {
+          fields: {
+            order_id: { type: "bytes", id: 1 },
+            chain_id: { type: "uint64", id: 2 },
+          },
+        },
+        MessageDexLimitOrder: {
+          fields: {
+            chain_id: { type: "uint64", id: 1 },
+            amount_for_sale: { type: "uint64", id: 2 },
+            requested_amount: { type: "uint64", id: 3 },
+            address: { type: "bytes", id: 4 },
+          },
+        },
+        MessageDexLiquidityDeposit: {
+          fields: {
+            chain_id: { type: "uint64", id: 1 },
+            amount: { type: "uint64", id: 2 },
+            address: { type: "bytes", id: 3 },
+            order_id: { type: "bytes", id: 4 },
+          },
+        },
+        MessageDexLiquidityWithdraw: {
+          fields: {
+            chain_id: { type: "uint64", id: 1 },
+            percent: { type: "uint64", id: 2 },
+            address: { type: "bytes", id: 3 },
+            order_id: { type: "bytes", id: 4 },
+          },
+        },
       },
     },
     google: {
@@ -62,6 +164,19 @@ const root = protobuf.Root.fromJSON({
 
 const Transaction = root.lookupType("types.Transaction");
 const MsgSend = root.lookupType("types.MessageSend");
+const MsgUnstake = root.lookupType("types.MessageUnstake");
+const MsgPause = root.lookupType("types.MessagePause");
+const MsgUnpause = root.lookupType("types.MessageUnpause");
+const MsgStake = root.lookupType("types.MessageStake");
+const MsgEditStake = root.lookupType("types.MessageEditStake");
+const MsgSubsidy = root.lookupType("types.MessageSubsidy");
+const MsgDAOTransfer = root.lookupType("types.MessageDAOTransfer");
+const MsgCreateOrder = root.lookupType("types.MessageCreateOrder");
+const MsgEditOrder = root.lookupType("types.MessageEditOrder");
+const MsgDeleteOrder = root.lookupType("types.MessageDeleteOrder");
+const MsgDexLimitOrder = root.lookupType("types.MessageDexLimitOrder");
+const MsgDexLiquidityDeposit = root.lookupType("types.MessageDexLiquidityDeposit");
+const MsgDexLiquidityWithdraw = root.lookupType("types.MessageDexLiquidityWithdraw");
 
 // Message type registry: tx type -> { typeName, encoder, protojson encoder }
 const MESSAGE_REGISTRY: Record<
@@ -91,6 +206,236 @@ const MESSAGE_REGISTRY: Record<
       fromAddress: bytesToBase64(hexToBytes(msg.fromAddress)),
       toAddress: bytesToBase64(hexToBytes(msg.toAddress)),
       amount: msg.amount,
+    }),
+  },
+  unstake: {
+    typeName: "types.MessageUnstake",
+    encode: (msg) =>
+      MsgUnstake.encode(
+        MsgUnstake.create({
+          from_address: hexToBytes(msg.fromAddress),
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      fromAddress: bytesToBase64(hexToBytes(msg.fromAddress)),
+    }),
+  },
+  pause: {
+    typeName: "types.MessagePause",
+    encode: (msg) =>
+      MsgPause.encode(
+        MsgPause.create({
+          address: hexToBytes(msg.address),
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      address: bytesToBase64(hexToBytes(msg.address)),
+    }),
+  },
+  unpause: {
+    typeName: "types.MessageUnpause",
+    encode: (msg) =>
+      MsgUnpause.encode(
+        MsgUnpause.create({
+          address: hexToBytes(msg.address),
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      address: bytesToBase64(hexToBytes(msg.address)),
+    }),
+  },
+  stake: {
+    typeName: "types.MessageStake",
+    encode: (msg) =>
+      MsgStake.encode(
+        MsgStake.create({
+          public_key: hexToBytes(msg.publicKey),
+          amount: msg.amount,
+          committees: msg.committees || [],
+          net_address: msg.netAddress || "",
+          output_address: hexToBytes(msg.outputAddress || ""),
+          delegate: msg.delegate || false,
+          compound: msg.compound || false,
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      publicKey: bytesToBase64(hexToBytes(msg.publicKey)),
+      amount: msg.amount,
+      committees: msg.committees || [],
+      netAddress: msg.netAddress || "",
+      outputAddress: msg.outputAddress ? bytesToBase64(hexToBytes(msg.outputAddress)) : "",
+      delegate: msg.delegate || false,
+      compound: msg.compound || false,
+    }),
+  },
+  editStake: {
+    typeName: "types.MessageEditStake",
+    encode: (msg) =>
+      MsgEditStake.encode(
+        MsgEditStake.create({
+          address: hexToBytes(msg.address),
+          amount: msg.amount,
+          committees: msg.committees || [],
+          net_address: msg.netAddress || "",
+          output_address: hexToBytes(msg.outputAddress || ""),
+          compound: msg.compound || false,
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      address: bytesToBase64(hexToBytes(msg.address)),
+      amount: msg.amount,
+      committees: msg.committees || [],
+      netAddress: msg.netAddress || "",
+      outputAddress: msg.outputAddress ? bytesToBase64(hexToBytes(msg.outputAddress)) : "",
+      compound: msg.compound || false,
+    }),
+  },
+  subsidy: {
+    typeName: "types.MessageSubsidy",
+    encode: (msg) =>
+      MsgSubsidy.encode(
+        MsgSubsidy.create({
+          address: hexToBytes(msg.address),
+          chain_id: msg.chainId,
+          amount: msg.amount,
+          opcode: hexToBytes(msg.opcode || "00"),
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      address: bytesToBase64(hexToBytes(msg.address)),
+      chainId: msg.chainId,
+      amount: msg.amount,
+      opcode: bytesToBase64(hexToBytes(msg.opcode || "00")),
+    }),
+  },
+  daoTransfer: {
+    typeName: "types.MessageDAOTransfer",
+    encode: (msg) =>
+      MsgDAOTransfer.encode(
+        MsgDAOTransfer.create({
+          address: hexToBytes(msg.address),
+          amount: msg.amount,
+          start_height: msg.startHeight,
+          end_height: msg.endHeight,
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      address: bytesToBase64(hexToBytes(msg.address)),
+      amount: msg.amount,
+      startHeight: msg.startHeight,
+      endHeight: msg.endHeight,
+    }),
+  },
+  createOrder: {
+    typeName: "types.MessageCreateOrder",
+    encode: (msg) =>
+      MsgCreateOrder.encode(
+        MsgCreateOrder.create({
+          chain_id: msg.chainId,
+          data: hexToBytes(msg.data || ""),
+          amount_for_sale: msg.amountForSale,
+          requested_amount: msg.requestedAmount,
+          seller_receive_address: hexToBytes(msg.sellerReceiveAddress || ""),
+          sellers_send_address: hexToBytes(msg.sellersSendAddress),
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      chainId: msg.chainId,
+      data: msg.data ? bytesToBase64(hexToBytes(msg.data)) : "",
+      amountForSale: msg.amountForSale,
+      requestedAmount: msg.requestedAmount,
+      sellerReceiveAddress: msg.sellerReceiveAddress ? bytesToBase64(hexToBytes(msg.sellerReceiveAddress)) : "",
+      sellersSendAddress: bytesToBase64(hexToBytes(msg.sellersSendAddress)),
+    }),
+  },
+  editOrder: {
+    typeName: "types.MessageEditOrder",
+    encode: (msg) =>
+      MsgEditOrder.encode(
+        MsgEditOrder.create({
+          order_id: hexToBytes(msg.orderId),
+          chain_id: msg.chainId,
+          data: hexToBytes(msg.data || ""),
+          amount_for_sale: msg.amountForSale,
+          requested_amount: msg.requestedAmount,
+          seller_receive_address: hexToBytes(msg.sellerReceiveAddress || ""),
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      orderId: bytesToBase64(hexToBytes(msg.orderId)),
+      chainId: msg.chainId,
+      data: msg.data ? bytesToBase64(hexToBytes(msg.data)) : "",
+      amountForSale: msg.amountForSale,
+      requestedAmount: msg.requestedAmount,
+      sellerReceiveAddress: msg.sellerReceiveAddress ? bytesToBase64(hexToBytes(msg.sellerReceiveAddress)) : "",
+    }),
+  },
+  deleteOrder: {
+    typeName: "types.MessageDeleteOrder",
+    encode: (msg) =>
+      MsgDeleteOrder.encode(
+        MsgDeleteOrder.create({
+          order_id: hexToBytes(msg.orderId),
+          chain_id: msg.chainId,
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      orderId: bytesToBase64(hexToBytes(msg.orderId)),
+      chainId: msg.chainId,
+    }),
+  },
+  dexLimitOrder: {
+    typeName: "types.MessageDexLimitOrder",
+    encode: (msg) =>
+      MsgDexLimitOrder.encode(
+        MsgDexLimitOrder.create({
+          chain_id: msg.chainId,
+          amount_for_sale: msg.amountForSale,
+          requested_amount: msg.requestedAmount,
+          address: hexToBytes(msg.address),
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      chainId: msg.chainId,
+      amountForSale: msg.amountForSale,
+      requestedAmount: msg.requestedAmount,
+      address: bytesToBase64(hexToBytes(msg.address)),
+    }),
+  },
+  dexLiquidityDeposit: {
+    typeName: "types.MessageDexLiquidityDeposit",
+    encode: (msg) =>
+      MsgDexLiquidityDeposit.encode(
+        MsgDexLiquidityDeposit.create({
+          chain_id: msg.chainId,
+          amount: msg.amount,
+          address: hexToBytes(msg.address),
+          order_id: hexToBytes(msg.orderId || ""),
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      chainId: msg.chainId,
+      amount: msg.amount,
+      address: bytesToBase64(hexToBytes(msg.address)),
+      orderId: msg.orderId ? bytesToBase64(hexToBytes(msg.orderId)) : "",
+    }),
+  },
+  dexLiquidityWithdraw: {
+    typeName: "types.MessageDexLiquidityWithdraw",
+    encode: (msg) =>
+      MsgDexLiquidityWithdraw.encode(
+        MsgDexLiquidityWithdraw.create({
+          chain_id: msg.chainId,
+          percent: msg.percent,
+          address: hexToBytes(msg.address),
+          order_id: hexToBytes(msg.orderId || ""),
+        })
+      ).finish(),
+    toProtojson: (msg) => ({
+      chainId: msg.chainId,
+      percent: msg.percent,
+      address: bytesToBase64(hexToBytes(msg.address)),
+      orderId: msg.orderId ? bytesToBase64(hexToBytes(msg.orderId)) : "",
     }),
   },
 };
