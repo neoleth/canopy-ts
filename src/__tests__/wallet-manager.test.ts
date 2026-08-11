@@ -7,15 +7,19 @@ import * as walletModule from "../wallet.js";
 import * as transactionModule from "../transaction.js";
 
 // Mock data for tests
-// BLS12381 public key is 48 bytes = 96 hex characters
+// BLS12381 public key is 48 bytes = 96 hex characters. keyAddress below is the real
+// address deriveAddress() computes for it (sha256(pubkey)[:20], no "0x" prefix — see
+// src/address.ts) — importFromGoKeystore() throws on any entry whose stored address
+// doesn't match that derivation (integrity check, see keystore.ts), so a placeholder
+// address here would fail every test that loads this fixture.
 const mockBls12381PublicKey =
-  "2f469f1af9a0419c09f11e6609a36a27806d2ba201eb0982d150433c7fad68c579a42789cbbb70c8063909a0f85e4233";
+  "aa1a1c26055a329817a5759d877a2795f9499b97d6056edde0eea39512f24e8bc874b4471f0501127abb1ea0d9f68ac1";
 
 const mockGoKeystoreEntry = {
   publicKey: mockBls12381PublicKey,
   salt: "b4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9",
   encrypted: "d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
-  keyAddress: "0x1234567890abcdef1234567890abcdef12345678",
+  keyAddress: "196c357b8b3a6b3fd82386e7bebf77143d537cdb",
   keyNickname: "test-key",
 };
 
@@ -31,14 +35,20 @@ const mockParsedKeystoreEntry = {
 const mockPrivateKeyHex =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
+// A second, distinct BLS12381 keypair — reusing mockBls12381PublicKey here with a
+// different keyAddress would trip the same integrity check, since a public key can
+// only ever derive to one address.
+const mockSecondaryPublicKey =
+  "8004066a1a5cb9cdf244e45f0a59cf579a78d90ac0bc24663565264601c1c9251c0aa3dfb9835b520e0ba0f211a6696c";
+
 const mockKeystoreJson = {
   entries: [
     mockGoKeystoreEntry,
     {
-      publicKey: mockBls12381PublicKey,
+      publicKey: mockSecondaryPublicKey,
       salt: "c5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
       encrypted: "e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
-      keyAddress: "0xabcdef0123456789abcdef0123456789abcdef01",
+      keyAddress: "06d32a2078692dadc0b81723abb6cb8fe996b44a",
       keyNickname: "secondary-key",
     },
   ],
@@ -113,7 +123,7 @@ describe("WalletManager", () => {
         entries: [
           {
             ...mockGoKeystoreEntry,
-            keyAddress: "0x1234567890ABCDEF1234567890ABCDEF12345678",
+            keyAddress: "196C357B8B3A6B3FD82386E7BEBF77143D537CDB",
           },
         ],
       };
@@ -121,7 +131,7 @@ describe("WalletManager", () => {
       walletManager.loadKeystoreJson(mixedCaseEntry);
 
       const accounts = walletManager.getAccounts();
-      expect(accounts[0]).toBe("0x1234567890abcdef1234567890abcdef12345678");
+      expect(accounts[0]).toBe("196c357b8b3a6b3fd82386e7bebf77143d537cdb");
     });
 
     it("should throw error on invalid keystore format - missing entries", () => {
@@ -198,7 +208,7 @@ describe("WalletManager", () => {
     });
 
     it("should handle mixed case address lookup", () => {
-      const mixedCaseAddress = "0x1234567890ABCDEF1234567890ABCDEF12345678";
+      const mixedCaseAddress = "196C357B8B3A6B3FD82386E7BEBF77143D537CDB";
       const account = walletManager.getAccount(mixedCaseAddress);
 
       expect(account).toBeDefined();
@@ -273,7 +283,7 @@ describe("WalletManager", () => {
         mockPrivateKeyHex
       );
 
-      const mixedCaseAddress = "0x1234567890ABCDEF1234567890ABCDEF12345678";
+      const mixedCaseAddress = "196C357B8B3A6B3FD82386E7BEBF77143D537CDB";
       const privateKey = await walletManager.unlockAccount(
         mixedCaseAddress,
         "password"
@@ -356,7 +366,7 @@ describe("WalletManager", () => {
         mockSignedTransaction as any
       );
 
-      const mixedCaseAddress = "0x1234567890ABCDEF1234567890ABCDEF12345678";
+      const mixedCaseAddress = "196C357B8B3A6B3FD82386E7BEBF77143D537CDB";
       const tx = walletManager.buildTransaction(
         mixedCaseAddress,
         mockTransactionParams,
@@ -456,7 +466,7 @@ describe("WalletManager", () => {
     });
 
     it("should handle mixed case address", () => {
-      const mixedCaseAddress = "0x1234567890ABCDEF1234567890ABCDEF12345678";
+      const mixedCaseAddress = "196C357B8B3A6B3FD82386E7BEBF77143D537CDB";
       const isValid = walletManager.isValidAccount(mixedCaseAddress);
       expect(isValid).toBe(true);
     });
@@ -484,7 +494,7 @@ describe("WalletManager", () => {
     });
 
     it("should handle mixed case address", () => {
-      const mixedCaseAddress = "0x1234567890ABCDEF1234567890ABCDEF12345678";
+      const mixedCaseAddress = "196C357B8B3A6B3FD82386E7BEBF77143D537CDB";
       const curveType = walletManager.getCurveType(mixedCaseAddress);
       expect(curveType).toBe(CurveTypeEnum.BLS12381);
     });
