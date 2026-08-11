@@ -1,8 +1,8 @@
 # @canopynetwork/canopy-ts
 
-TypeScript SDK for Canopy blockchain plugin frontends — signing, keystore, RPC, and WebSocket transport.
+TypeScript SDK for Canopy blockchain plugin frontends — signing, keystore, and RPC.
 
-Scoped for **plugin frontends**: browser/UI code that signs transactions, manages a local keystore, and talks to a Canopy node over RPC/WebSocket, without a backend in between.
+Scoped for **plugin frontends**: browser/UI code that signs transactions, manages a local keystore, and talks to a Canopy node over RPC, without a backend in between.
 
 ## Install
 
@@ -22,7 +22,7 @@ import { fetchHeight } from "@canopynetwork/canopy-ts/rpc";
 ```
 
 Importing from the package root works too, but pulls in every subpath's
-dependencies (protobufjs, zod, noble-curves, the WS transport) even if you
+dependencies (protobufjs, zod, noble-curves) even if you
 only need one of them:
 
 ```ts
@@ -33,13 +33,11 @@ import { generateKeyPair, fetchHeight } from "@canopynetwork/canopy-ts";
 |---|---|
 | `./crypto` | Key generation, signing, address derivation, keystore encryption, transaction builders |
 | `./rpc` | Node RPC query methods (accounts, blocks, transactions, validators, ...) |
-| `./ws` | WebSocket transport + per-channel protobuf routing |
 | `./errors` | `CanopyError` hierarchy |
 | `./keystore` | Go-keystore-compatible import/export |
 | `./wallet-manager` | `WalletManager` — multi-account wallet with injectable storage |
 | `./node-pool` | `NodePool` — multi-node RPC client with automatic failover |
 | `./transaction` | Transaction builders (`createAndSignTransaction`) |
-| `./proto/*` | Raw `.proto` schema files for the WebSocket protocol |
 
 ## Quick start
 
@@ -113,26 +111,6 @@ const pool = new NodePool([
 // Rotates to the next enabled node on connection/timeout/5xx errors;
 // propagates 4xx immediately without rotating (it's not a node-health signal).
 const height = await pool.withFailover((opts) => fetchHeight(opts));
-```
-
-### WebSocket transport
-
-```ts
-import { DirectTransport, ChannelRouter, makeFrameCodec, makeSystemCodec } from "@canopynetwork/canopy-ts/ws";
-
-const root = /* load your .proto schemas — see ./proto/* exports */;
-const transport = new DirectTransport({
-  publicKeyHex: publicKey,
-  privateKeyHex: privateKey,
-  curveType: CurveType.ED25519,
-  wsUrl: "wss://node.example.com/ws",
-  frameCodec: makeFrameCodec(root),
-  systemCodec: makeSystemCodec(root),
-});
-
-const router = new ChannelRouter(transport, root);
-router.registerChannel("mychannel", "MyEnvelopeType");
-router.on("mychannel", (msg) => console.log(msg));
 ```
 
 ### Building and signing a transaction
