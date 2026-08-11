@@ -26,10 +26,25 @@
       "types": "./dist/errors.d.ts",
       "import": "./dist/errors.js"
     },
-    "./proto": {
-      "default": "./dist/proto/"
-    }
+    "./keystore": {
+      "types": "./dist/keystore.d.ts",
+      "import": "./dist/keystore.js"
+    },
+    "./wallet-manager": {
+      "types": "./dist/wallet-manager.d.ts",
+      "import": "./dist/wallet-manager.js"
+    },
+    "./node-pool": {
+      "types": "./dist/node-pool.d.ts",
+      "import": "./dist/node-pool.js"
+    },
+    "./transaction": {
+      "types": "./dist/transaction.d.ts",
+      "import": "./dist/transaction.js"
+    },
+    "./proto/*": "./dist/proto/*"
   },
+  "sideEffects": false,
   "files": [
     "dist",
     "CHANGELOG.md"

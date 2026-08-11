@@ -27,6 +27,10 @@ export {
 } from "./protobuf.js";
 
 export { createAndSignTransaction } from "./transaction.js";
-export type { PluginTransaction } from "./transaction.js";
+export type {
+  PluginTransaction,
+  CoreTransaction,
+  CreateAndSignTransactionOptions,
+} from "./transaction.js";
 
 export { hexToBytes, bytesToHex } from "@noble/hashes/utils.js";

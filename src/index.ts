@@ -1,13 +1,19 @@
 /**
  * @canopynetwork/canopy-ts — Canopy blockchain TypeScript SDK
  *
- * Subpath imports (recommended):
- *   import { ... } from "@canopynetwork/canopy-ts/crypto"  — signing, encoding, wallets
- *   import { ... } from "@canopynetwork/canopy-ts/rpc"     — node RPC helpers
- *   import { ... } from "@canopynetwork/canopy-ts/ws"      — WebSocket transport
- *   import { ... } from "@canopynetwork/canopy-ts/errors"  — error classes
+ * Subpath imports (recommended — smaller bundles, only pulls in what you use):
+ *   import { ... } from "@canopynetwork/canopy-ts/crypto"          — signing, encoding, wallets
+ *   import { ... } from "@canopynetwork/canopy-ts/rpc"             — node RPC helpers
+ *   import { ... } from "@canopynetwork/canopy-ts/ws"              — WebSocket transport
+ *   import { ... } from "@canopynetwork/canopy-ts/errors"          — error classes
+ *   import { ... } from "@canopynetwork/canopy-ts/keystore"        — Go-keystore import/export
+ *   import { ... } from "@canopynetwork/canopy-ts/wallet-manager"  — WalletManager (multi-account)
+ *   import { ... } from "@canopynetwork/canopy-ts/node-pool"       — NodePool (multi-node failover)
+ *   import { ... } from "@canopynetwork/canopy-ts/transaction"     — transaction builders
  *
- * Or import everything from the root for convenience:
+ * Or import everything from the root for convenience — costs more bundle size
+ * since it pulls in every subpath's dependencies (protobufjs, zod, noble-curves,
+ * the WS transport) even if you only need one of them:
  *   import { ... } from "@canopynetwork/canopy-ts"
  */
 
