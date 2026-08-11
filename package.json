@@ -1,7 +1,7 @@
 {
   "name": "@canopynetwork/canopy-ts",
   "version": "0.8.0",
-  "description": "TypeScript SDK for Canopy blockchain plugin frontends — signing, keystore, RPC, and WebSocket transport",
+  "description": "TypeScript SDK for Canopy blockchain plugin frontends — signing, keystore, and RPC",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,10 +17,6 @@
     "./rpc": {
       "types": "./dist/rpc.d.ts",
       "import": "./dist/rpc.js"
-    },
-    "./ws": {
-      "types": "./dist/ws.d.ts",
-      "import": "./dist/ws.js"
     },
     "./errors": {
       "types": "./dist/errors.d.ts",
@@ -41,20 +37,12 @@
     "./transaction": {
       "types": "./dist/transaction.d.ts",
       "import": "./dist/transaction.js"
-    },
-    "./proto/*": "./dist/proto/*"
+    }
   },
   "sideEffects": false,
   "files": [
     "dist",
     "CHANGELOG.md"
-  ],
-  "publishedWsProtos": [
-    "ws_frame.proto",
-    "dice_ws.proto",
-    "plinko_ws.proto",
-    "market_ws.proto",
-    "account.proto"
   ],
   "repository": {
     "type": "git",
@@ -64,10 +52,9 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc && npm run postbuild",
-    "postbuild": "node scripts/copy-ws-protos.cjs",
+    "build": "tsc",
     "dev": "tsc --watch",
-    "prepare": "tsc && npm run postbuild",
+    "prepare": "tsc",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.config.e2e.ts"
   },
