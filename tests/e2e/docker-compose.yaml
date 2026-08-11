@@ -1,0 +1,19 @@
+# Single-node canopy devnet for canopy-ts's e2e test suite.
+#
+# CANOPY_SRC_PATH must point at a local checkout of canopy-network/canopy (main/) —
+# defaults to the conventional sibling-repo layout (~/canopy/canopy-ts and
+# ~/canopy/canopy/main checked out side by side). Override if yours differs:
+#   CANOPY_SRC_PATH=/path/to/canopy/main docker compose -f tests/e2e/docker-compose.yaml up --build
+
+services:
+  canopy-e2e-node:
+    container_name: canopy-e2e-node
+    build:
+      context: ${CANOPY_SRC_PATH:-../../../canopy/main}
+      dockerfile: ../../canopy-ts/tests/e2e/canopy-node.Dockerfile
+    ports:
+      - "${E2E_RPC_PORT:-51002}:50002" # RPC
+      - "${E2E_ADMIN_PORT:-51003}:50003" # Admin RPC
+    command: ["start"]
+    volumes:
+      - ./devnet:/root/.canopy

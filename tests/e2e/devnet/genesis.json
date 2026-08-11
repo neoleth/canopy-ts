@@ -1,0 +1,66 @@
+{
+  "time": "2026-07-14 00:00:00",
+  "accounts": [
+    {
+      "address": "3db4b1ec0d9206365696e0c3a52a519840060c86",
+      "amount": 1000000000000
+    }
+  ],
+  "nonSigners": null,
+  "validators": [
+    {
+      "address": "3db4b1ec0d9206365696e0c3a52a519840060c86",
+      "publicKey": "b9b7595aa7f020372acfd9f26d84e6c8ff41424aed969f19d040e157786068b78fe82570624f169f576ee3c1f99fc40b",
+      "committees": [
+        1
+      ],
+      "netAddress": "tcp://canopy-e2e-node",
+      "stakedAmount": 1000000000,
+      "output": "3db4b1ec0d9206365696e0c3a52a519840060c86"
+    }
+  ],
+  "params": {
+    "consensus": {
+      "blockSize": 1000000,
+      "protocolVersion": "1/0",
+      "rootChainID": 1,
+      "retired": 0
+    },
+    "validator": {
+      "unstakingBlocks": 2,
+      "maxPauseBlocks": 4380,
+      "doubleSignSlashPercentage": 10,
+      "nonSignSlashPercentage": 1,
+      "maxNonSign": 4,
+      "nonSignWindow": 10,
+      "maxCommittees": 15,
+      "maxCommitteeSize": 100,
+      "earlyWithdrawalPenalty": 20,
+      "delegateUnstakingBlocks": 2,
+      "minimumOrderSize": 1000,
+      "stakePercentForSubsidizedCommittee": 33,
+      "maxSlashPerCommittee": 15,
+      "delegateRewardPercentage": 10,
+      "buyDeadlineBlocks": 15,
+      "lockOrderFeeMultiplier": 2
+    },
+    "fee": {
+      "sendFee": 10000,
+      "stakeFee": 10000,
+      "editStakeFee": 10000,
+      "unstakeFee": 10000,
+      "pauseFee": 10000,
+      "unpauseFee": 10000,
+      "changeParameterFee": 10000,
+      "daoTransferFee": 10000,
+      "subsidyFee": 10000,
+      "createOrderFee": 10000,
+      "editOrderFee": 10000,
+      "deleteOrderFee": 10000
+    },
+    "governance": {
+      "daoRewardPercentage": 10
+    }
+  },
+  "supply": null
+}
