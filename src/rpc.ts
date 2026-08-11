@@ -916,3 +916,66 @@ export async function pool(
   result.pool_id = chainId + addend;
   return result;
 }
+
+/**
+ * Query the not-yet-locked DEX batch for a committee.
+ *
+ * The queue MessageDexLiquidityDeposit/MessageDexLiquidityWithdraw append to before
+ * it's locked and settled (typically 1-2 block cycles later). Useful for confirming
+ * a deposit/withdraw was actually queued, since settlement itself requires a
+ * counterpart chain to process the batch.
+ *
+ * Args:
+ *   chainId: The committee/chain ID (same id passed as `committee_id` to
+ *            deposit()/withdraw() -- the COUNTER-ASSET chain, not necessarily
+ *            the chain being submitted to)
+ *   opts: Request options including optional height parameter (0 = latest)
+ *
+ * Returns:
+ *   Dict with DEX batch data
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function nextDexBatch(
+  chainId: number,
+  opts: RequestOptions & { height?: number } = {},
+): Promise<Record<string, any>> {
+  const { height = 0, ...requestOpts } = opts;
+
+  return postQuery("nextDexBatch", "/v1/query/next-dex-batch", {
+    id: chainId,
+    height,
+  }, requestOpts);
+}
+
+/**
+ * List open DEX sell orders for a committee.
+ *
+ * Each result's "id" is the order's hex order ID -- the same value
+ * edit_order()/delete_order() expect for their order_id argument.
+ *
+ * Args:
+ *   committeeId: The committee id the orders belong to (same id passed as
+ *                `committee_id` to create_order/edit_order/delete_order)
+ *   opts: Request options including optional pageParams and height
+ *
+ * Returns:
+ *   Dict with orders list and pagination info
+ *
+ * Throws:
+ *   RpcError: On HTTP errors or network failures
+ */
+export async function orders(
+  committeeId: number,
+  opts: RequestOptions & { pageParams?: PageParams; height?: number } = {},
+): Promise<Record<string, any>> {
+  const { pageParams, height = 0, ...requestOpts } = opts;
+  const params = pageParams || new PageParams();
+
+  return postQuery("orders", "/v1/query/orders", {
+    ...params.toDict(),
+    committee: committeeId,
+    height,
+  }, requestOpts);
+}
